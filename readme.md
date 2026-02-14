@@ -1,4 +1,3 @@
-
 # no_gfx: A Low-Level API for Sane Graphics Programming
 
 **Warning:** This project is still in development, so expect some breaking changes.
@@ -8,6 +7,7 @@ It isn't controversial to say this: graphics APIs are a mess. "Modern" graphics 
 **no_gfx**'s goal is to implement an ideal "API of the future" on top of existing APIs (Vulkan), greatly simplifying graphics programming without sacrificing modern features like indirect rendering and raytracing. It initially started as a 1:1 recreation of the theoretical API outlined in Sebastian Aaltonen's ["No Graphics API"](https://www.sebastianaaltonen.com/blog/no-graphics-api) blog post; there are now a few divergences - partly due to the limitations of current APIs - but the overall design and core philosophy is still the same.
 
 ## API Usage
+
 Third-party binaries are already included, so it's sufficient to copy the `gpu` directory and add `import "gpu"` to your files.
 
 The API is straightforward to use:
@@ -104,14 +104,17 @@ gpu.wait_idle()  // Wait until the end of execution for resource destruction
 There are many examples you can find in the `examples` directory.
 
 ## Disadvantages
+
 Like most things in life, this is not without its tradeoffs:
-1) It assumes relatively recent hardware. It requires Vulkan 1.3 with the following extensions: VK_EXT_shader_object, VK_EXT_descriptor_buffer, VK_KHR_draw_indirect_count. It can use more extensions for optional features such as raytracing.
-2) Shader arguments are all passed via a single pointer. This is very flexible and easy to work with, but it can also prevent some prefetching/optimizations that drivers usually implement with standard bindings and vertex buffers. This will probably make shaders in general slightly slower. How much impact this will have, I can't say for sure right now. On the other hand, working with a nicer and better API can make optimization easier and quicker.
-3) If you're trying to debug the examples using RenderDoc, and you can't, that's because debugging of descriptor buffers is simply broken on AMD Windows due to a driver bug, and this project uses them. [The bug has been reported](https://github.com/baldurk/renderdoc/issues/2880) on July 2025, so you can either switch to an NVidia card or annoy AMD if you want this fixed (half joking).
+
+1. It assumes relatively recent hardware. It requires Vulkan 1.3 with the following extensions: VK_EXT_shader_object, VK_EXT_descriptor_buffer, VK_KHR_draw_indirect_count. It can use more extensions for optional features such as raytracing.
+2. Shader arguments are all passed via a single pointer. This is very flexible and easy to work with, but it can also prevent some prefetching/optimizations that drivers usually implement with standard bindings and vertex buffers. This will probably make shaders in general slightly slower. How much impact this will have, I can't say for sure right now. On the other hand, working with a nicer and better API can make optimization easier and quicker.
+3. If you're trying to debug the examples using RenderDoc, and you can't, that's because debugging of descriptor buffers is simply broken on AMD Windows due to a driver bug, and this project uses them. [The bug has been reported](https://github.com/baldurk/renderdoc/issues/2880) on July 2025, so you can either switch to an NVidia card or annoy AMD if you want this fixed (half joking).
 
 ## Shaders
 
 I think people should be able to use whichever shading language they want, but there are a few limitations due to the nature of this project. **no_gfx** uses pointers as the main way to pass data to shaders, so shading languages that don't support pointers at all are sadly disqualified - this includes HLSL. Other than that, any shading language can be used as long as a `.spirv` binary is produced with the following format (pseudocode, GLSL-like):
+
 ```glsl
 layout(set = 0, binding = 0) uniform texture2D textures[];
 layout(set = 1, binding = 0) uniform image2D textures_rw[];
@@ -166,11 +169,17 @@ main :: (vert_id: uint @vert_id, data: ^Data @data) -> Output
 
 ## Building
 
-Third-party binaries are already included.
+To build this project, you will need
 
-- To build all of the examples: `examples/build.bat` or `examples/build.sh`
-- Or you can run them directly: `odin run examples/1_triangle -debug -out=build/1_triangle.exe`
-- To rebuild the shader binaries: `examples/build_shaders.bat` or `examples/build_shaders.sh`
-- To rebuild the shader binaries using Slang: `examples/build_shaders_slang.bat` or `examples/build_shaders_slang.sh`
+- [Odin](https://odin-lang.org/)
+- [Vulkan SDK](https://vulkan.lunarg.com/)
+- [premake5](https://premake.github.io/download)
+- [make](https://www.gnu.org/software/make/)
+- [git](https://git-scm.com/)
+- [python3](https://www.python.org/)
+
+Then run `make` to build dependencies, gpu_compiler, shaders and finally the examples. Make sure there are no errors.
+
+To run individual examples, run `make example1`, `make example2`, etc. See the [Makefile](Makefile) for all available commands.
 
 Feel free to [contact me on discord](https://discord.com/users/leon2058) for any questions.
