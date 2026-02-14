@@ -4,6 +4,7 @@ glsl_flags :=
 
 ifeq ($(OS),Windows_NT)
 exe_extension := .exe
+vs_version := 2022
 else
 exe_extension :=
 endif
@@ -11,7 +12,7 @@ endif
 default: vercheck build_vma build_imgui build
 
 # Verifies that all dependencies are installed
-vercheck:
+vercheck: vercheck_platform
 	make --version
 	premake5 --version
 	odin version
@@ -19,6 +20,18 @@ vercheck:
 	slangc -v
 	python3 --version
 	git -v
+	vulkaninfo --summary
+
+ifeq ($(OS),Windows_NT)
+vercheck_platform:
+	@if [ ! -f "C:/Program Files/Microsoft Visual Studio/$(vs_version)/Community/VC/Auxiliary/Build/vcvars64.bat" ]; then \
+		echo "Missing visual studio $(vs_version) build tools: C:/Program Files/Microsoft Visual Studio/$(vs_version)/Community/VC/Auxiliary/Build/vcvars64.bat"; \
+		exit 1; \
+	fi
+else
+vercheck_platform:
+	gcc --version
+endif
 
 clean_example:
 	rm -rf examples/$(example)/shaders/*.spv
@@ -58,14 +71,10 @@ compiler:
 ifeq ($(OS),Windows_NT)
 premake:
 	@echo "Compiling $(folder) with premake arguments $(arguments)"
-	powershell -NoProfile -Command "cmd /c 'call \"C:\Program Files\Microsoft Visual Studio\2022\Community\VC\Auxiliary\Build\vcvars64.bat\" && cd $(folder) && premake5 $(arguments) vs2022 && cd build && build.bat'"
-else ifeq ($(OS),Darwin)
-premake:
-	echo "Not supported on this platform"
-	exit 1
+	powershell -NoProfile -Command "cmd /c 'call \"C:\Program Files\Microsoft Visual Studio\$(vs_version)\Community\VC\Auxiliary\Build\vcvars64.bat\" && cd $(folder) && premake5 $(arguments) vs$(vs_version) && cd build && build.bat'"
 else
 premake:
-	cd $(folder) && premake5 $(arguments) gmake2 && cd build/make/linux && make
+	cd $(folder) && premake5 $(arguments) gmake && cd build/make/linux && make config=release_x86_64
 endif
 
 build_vma:
