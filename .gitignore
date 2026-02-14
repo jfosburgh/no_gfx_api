@@ -4,3 +4,9 @@
 *.raddbg_project
 *.glsl
 imgui.ini
+*.lib
+*.a
+*.so
+*.dylib
+*.dll
+*.spv
