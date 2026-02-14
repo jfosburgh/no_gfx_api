@@ -178,8 +178,8 @@ To build this project, you will need
 - [git](https://git-scm.com/)
 - [python3](https://www.python.org/)
 
-Then run `make` to build dependencies, gpu_compiler, shaders and finally the examples. Make sure there are no errors.
+Run `make` to build dependencies, gpu_compiler, shaders and finally the examples. Make sure there are no errors.
 
-To run individual examples, run `make example1`, `make example2`, etc. See the [Makefile](Makefile) for all available commands.
+To iterate on individual examples incl. shaders, run `make example1`, `make example2`, etc. See the [Makefile](Makefile) for all available commands.
 
 Feel free to [contact me on discord](https://discord.com/users/leon2058) for any questions.

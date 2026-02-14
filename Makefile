@@ -10,6 +10,7 @@ endif
 
 default: vercheck build_vma build_imgui build
 
+# Verifies that all dependencies are installed
 vercheck:
 	make --version
 	premake5 --version
@@ -23,12 +24,14 @@ clean_example:
 	rm -rf examples/$(example)/shaders/*.spv
 	rm -rf examples/$(example)/shaders/*.glsl
 
+# Checks that all examples compile without errors
 check:
 	$(foreach example,$(examples),$(MAKE) check_example example=$(example);)
 
 check_example:
 	odin check examples/$(example)
 
+# Builds all examples
 build:
 	$(foreach example,$(examples),$(MAKE) build_example example=$(example);)
 
@@ -46,6 +49,7 @@ run_example_slang:
 	$(MAKE) shader_slang example=$(example)
 	odin run examples/$(example) -debug -keep-executable "-out=build/$(subst /,_,$(example))$(exe_extension)"
 
+# Builds the gpu_compiler
 compiler:
 	odin build gpu_compiler -debug -out=build/gpu_compiler$(exe_extension)
 
@@ -69,6 +73,7 @@ build_imgui:
 
 # ==== Shaders ====
 
+# Builds the MUSL shaders for all examples
 shaders_musl:
 	$(foreach example,$(examples),$(MAKE) shader_musl example=$(example);)
 
@@ -93,7 +98,7 @@ shader_musl: compiler
 		glslangValidator $(glsl_flags) -V "$$glsl" -o "$$spv"; \
 	done
 
-
+# Builds the Slang shaders for all examples
 shaders_slang:
 	$(foreach example,$(examples),$(MAKE) shader_slang example=$(example);)
 
