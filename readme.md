@@ -171,12 +171,14 @@ main :: (vert_id: uint @vert_id, data: ^Data @data) -> Output
 
 To build this project, you will need
 
-- [Odin](https://odin-lang.org/)
+- [Odin >= 2026-02](https://odin-lang.org/)
 - [Vulkan SDK](https://vulkan.lunarg.com/)
 - [premake5](https://premake.github.io/download)
 - [make](https://www.gnu.org/software/make/)
 - [git](https://git-scm.com/)
 - [python3](https://www.python.org/)
+- [Windows] [Visual Studio 2022](https://visualstudio.microsoft.com/downloads/)
+- [Linux] [GCC](https://gcc.gnu.org/)
 
 Run `make` to build dependencies, gpu_compiler, shaders and finally the examples. Make sure there are no errors.
 

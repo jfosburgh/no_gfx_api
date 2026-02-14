@@ -59,10 +59,13 @@ ifeq ($(OS),Windows_NT)
 premake:
 	@echo "Compiling $(folder) with premake arguments $(arguments)"
 	powershell -NoProfile -Command "cmd /c 'call \"C:\Program Files\Microsoft Visual Studio\2022\Community\VC\Auxiliary\Build\vcvars64.bat\" && cd $(folder) && premake5 $(arguments) vs2022 && cd build && build.bat'"
-else
+else ifeq ($(OS),Darwin)
 premake:
 	echo "Not supported on this platform"
 	exit 1
+else
+premake:
+	cd $(folder) && premake5 $(arguments) gmake2 && cd build/make/linux && make
 endif
 
 build_vma:

@@ -10,3 +10,5 @@ imgui.ini
 *.dylib
 *.dll
 *.spv
+build/*
+!build/SDL3.dll
