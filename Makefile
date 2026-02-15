@@ -10,18 +10,23 @@ else
 exe_extension :=
 endif
 
-default: vercheck build_vma build_imgui build
+default: vercheck build
+
+full_build: vercheck_native build_vma build_imgui build
 
 # Verifies that all dependencies are installed
-vercheck: vercheck_platform
+vercheck:
 	make --version
-	premake5 --version
 	odin version
 	glslangValidator --version
 	slangc -v
-	python3 --version
-	git -v
 	vulkaninfo --summary
+
+# Verifies that all dependencies neede to build native dependencies are installed
+vercheck_native: vercheck vercheck_platform 
+	premake5 --version
+	python3 --version
+	git --version
 
 ifeq ($(OS),Windows_NT)
 vercheck_platform:
@@ -40,36 +45,36 @@ clean_example:
 
 # Checks that all examples compile without errors
 check:
-	$(foreach example,$(examples),$(MAKE) check_example example=$(example);)
+	$(foreach example,$(examples),make check_example example=$(example);)
 
 check_example:
 	odin check examples/$(example)
 
 # Builds all examples
 build:
-	$(foreach example,$(examples),$(MAKE) build_example example=$(example);)
+	$(foreach example,$(examples),make build_example example=$(example);)
 
 build_slang:
-	$(foreach example,$(examples),$(MAKE) build_example_slang example=$(example);)
+	$(foreach example,$(examples),make build_example_slang example=$(example);)
 
 build_example:
-	$(MAKE) clean_example example=$(example)
-	$(MAKE) shaders_musl example=$(example)
+	make clean_example example=$(example)
+	make shaders_musl example=$(example)
 	odin build examples/$(example) -debug "-out=build/$(subst /,_,$(example))$(exe_extension)"
 
 build_example_slang:
-	$(MAKE) clean_example example=$(example)
-	$(MAKE) shaders_slang example=$(example)
+	make clean_example example=$(example)
+	make shaders_slang example=$(example)
 	odin build examples/$(example) -debug "-out=build/$(subst /,_,$(example))$(exe_extension)"
 
 run_example:
-	$(MAKE) clean_example example=$(example)
-	$(MAKE) shaders_musl example=$(example)
+	make clean_example example=$(example)
+	make shaders_musl example=$(example)
 	odin run examples/$(example) -debug -keep-executable "-out=build/$(subst /,_,$(example))$(exe_extension)"
 
 run_example_slang:
-	$(MAKE) clean_example example=$(example)
-	$(MAKE) shaders_slang example=$(example)
+	make clean_example example=$(example)
+	make shaders_slang example=$(example)
 	odin run examples/$(example) -debug -keep-executable "-out=build/$(subst /,_,$(example))$(exe_extension)"
 
 # Builds the gpu_compiler
@@ -87,10 +92,10 @@ premake:
 endif
 
 build_vma:
-	$(MAKE) premake folder=gpu/vma arguments=--vk-version=3
+	make premake folder=gpu/vma arguments=--vk-version=3
 
 build_imgui:
-	$(MAKE) premake folder=examples/third_party/dear_imgui/odin-imgui arguments=--backends=sdl3,vulkan
+	make premake folder=examples/third_party/dear_imgui/odin-imgui arguments=--backends=sdl3,vulkan
 
 # ==== Shaders ====
 
@@ -100,11 +105,11 @@ shader_musl:
 
 # Compiles MUSL shaders for one example via gpu_compiler + glslangValidator.
 shaders_musl: compiler
-	$(foreach shader,$(wildcard examples/$(example)/shaders/*.musl),$(MAKE) shader_musl shader=$(subst .musl,,$(shader));)
+	$(foreach shader,$(wildcard examples/$(example)/shaders/*.musl),make shader_musl shader=$(subst .musl,,$(shader));)
 
 # Builds the MUSL shaders for all examples
 shaders_musl_all:
-	$(foreach example,$(examples),$(MAKE) shaders_musl example=$(example);)
+	$(foreach example,$(examples),make shaders_musl example=$(example);)
 
 # Compiles Slang shaders for one example and validates SPIR-V output.
 shaders_slang:
@@ -114,48 +119,48 @@ shaders_slang:
 		[ -e "$$slang" ] || continue; \
 		base="$${slang%.slang}"; \
 		if [ -f "$$base.vert.musl" ]; then \
-      echo "Compiling $$slang to vertex shader"; \
-      slangc -target spirv -target glsl -fvk-use-scalar-layout -force-glsl-scalar-layout -validate-ir -no-mangle -entry vertexMain -stage vertex "$$slang" -o "$$base.vert.spv" -o "$$base.vert.glsl"; \
-      spirv-val "$$base.vert.spv" --relax-block-layout --scalar-block-layout --target-env vulkan1.3; \
+			echo "Compiling $$slang to vertex shader"; \
+			slangc -target spirv -target glsl -fvk-use-scalar-layout -force-glsl-scalar-layout -validate-ir -no-mangle -entry vertexMain -stage vertex "$$slang" -o "$$base.vert.spv" -o "$$base.vert.glsl"; \
+			spirv-val "$$base.vert.spv" --relax-block-layout --scalar-block-layout --target-env vulkan1.3; \
 		fi; \
 		if [ -f "$$base.frag.musl" ]; then \
-      echo "Compiling $$slang to fragment shader"; \
+			echo "Compiling $$slang to fragment shader"; \
 			slangc -target spirv -target glsl -fvk-use-scalar-layout -force-glsl-scalar-layout -validate-ir -no-mangle -entry fragmentMain -stage fragment "$$slang" -o "$$base.frag.spv" -o "$$base.frag.glsl"; \
-      spirv-val "$$base.frag.spv" --relax-block-layout --scalar-block-layout --target-env vulkan1.3; \
+			spirv-val "$$base.frag.spv" --relax-block-layout --scalar-block-layout --target-env vulkan1.3; \
 		fi; \
 		if [ -f "$$base.comp.musl" ]; then \
-      echo "Compiling $$slang to compute shader"; \
+			echo "Compiling $$slang to compute shader"; \
 			slangc -target spirv -target glsl -fvk-use-scalar-layout -force-glsl-scalar-layout -validate-ir -no-mangle -entry computeMain -stage compute "$$slang" -o "$$base.comp.spv" -o "$$base.comp.glsl"; \
-      spirv-val "$$base.comp.spv" --relax-block-layout --scalar-block-layout --target-env vulkan1.3; \
+			spirv-val "$$base.comp.spv" --relax-block-layout --scalar-block-layout --target-env vulkan1.3; \
 		fi; \
 	done
 
 # Builds the Slang shaders for all examples
 shaders_slang_all:
-	$(foreach example,$(examples),$(MAKE) shaders_slang example=$(example);)
+	$(foreach example,$(examples),make shaders_slang example=$(example);)
 
 # ==== Individual examples ====
 
 example1:
-	$(MAKE) run_example example=1_triangle
+	make run_example example=1_triangle
 
 example2:
-	$(MAKE) run_example example=2_textures
+	make run_example example=2_textures
 
 example3:
-	$(MAKE) run_example example=3_3D
+	make run_example example=3_3D
 
 example4:
-	$(MAKE) run_example example=4_indirect_triangles
+	make run_example example=4_indirect_triangles
 
 example5:
-	$(MAKE) run_example example=5_compute_shaders
+	make run_example example=5_compute_shaders
 
 example6:
-	$(MAKE) run_example example=6_deferred_async_load
+	make run_example example=6_deferred_async_load
 
 example7:
-	$(MAKE) run_example example=7_raytracing
+	make run_example example=7_raytracing
 
 example_imgui:
-	$(MAKE) run_example example=third_party/dear_imgui
+	make run_example example=third_party/dear_imgui

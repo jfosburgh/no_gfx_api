@@ -169,7 +169,11 @@ main :: (vert_id: uint @vert_id, data: ^Data @data) -> Output
 
 ## Running examples
 
-Run `make run_example1`, `make run_example2`, etc. See the [Makefile](Makefile) for all available commands. Binaries for dependencies are included.
+Binaries for dependencies are included.
+
+Run `make` to build all examples into the `build` directory.
+
+Run `make example1`, `make example2`, etc. to run individual examples.
 
 ## Building
 
@@ -184,6 +188,6 @@ To build this project, you will need
 - [Windows] [Visual Studio 2022](https://visualstudio.microsoft.com/downloads/)
 - [Linux] [GCC](https://gcc.gnu.org/)
 
-Run `make` to build dependencies, gpu_compiler, shaders and finally the examples. Make sure there are no errors.
+Run `make full_build` to build dependencies, gpu_compiler, shaders and finally the examples. Make sure there are no errors. See the [Makefile](Makefile) for all available commands.
 
 Feel free to [contact me on discord](https://discord.com/users/leon2058) for any questions.
