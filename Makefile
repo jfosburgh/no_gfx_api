@@ -100,16 +100,11 @@ shader_musl:
 
 # Compiles MUSL shaders for one example via gpu_compiler + glslangValidator.
 shaders_musl: compiler
-	$(foreach shader,$(wildcard examples/$(example)/shaders/*.musl),$(MAKE) shader_musl shader="$(subst .musl,,$(shader))";)
+	$(foreach shader,$(wildcard examples/$(example)/shaders/*.musl),$(MAKE) shader_musl shader=$(subst .musl,,$(shader));)
 
 # Builds the MUSL shaders for all examples
 shaders_musl_all:
 	$(foreach example,$(examples),$(MAKE) shaders_musl example=$(example);)
-
-shader_slang:
-	echo "$(shader_in)"
-	slangc -target spirv -target glsl -fvk-use-scalar-layout -force-glsl-scalar-layout -validate-ir -no-mangle -entry $(stage)Main -stage $(stage) "$(shader_in)" -o "$(shader_out).spv" -o "$(shader_out).glsl"
-	spirv-val "$(shader_out).spv" --relax-block-layout --scalar-block-layout --target-env vulkan1.3
 
 # Compiles Slang shaders for one example and validates SPIR-V output.
 shaders_slang:
@@ -119,19 +114,25 @@ shaders_slang:
 		[ -e "$$slang" ] || continue; \
 		base="$${slang%.slang}"; \
 		if [ -f "$$base.vert.musl" ]; then \
-			$(MAKE) shader_slang shader_in="$$slang" shader_out="$$base.vert" stage=vertex; \
+      echo "Compiling $$slang to vertex shader"; \
+      slangc -target spirv -target glsl -fvk-use-scalar-layout -force-glsl-scalar-layout -validate-ir -no-mangle -entry vertexMain -stage vertex "$$slang" -o "$$base.vert.spv" -o "$$base.vert.glsl"; \
+      spirv-val "$$base.vert.spv" --relax-block-layout --scalar-block-layout --target-env vulkan1.3; \
 		fi; \
 		if [ -f "$$base.frag.musl" ]; then \
-			$(MAKE) shader_slang shader_in="$$slang" shader_out="$$base.frag" stage=fragment; \
+      echo "Compiling $$slang to fragment shader"; \
+			slangc -target spirv -target glsl -fvk-use-scalar-layout -force-glsl-scalar-layout -validate-ir -no-mangle -entry fragmentMain -stage fragment "$$slang" -o "$$base.frag.spv" -o "$$base.frag.glsl"; \
+      spirv-val "$$base.frag.spv" --relax-block-layout --scalar-block-layout --target-env vulkan1.3; \
 		fi; \
 		if [ -f "$$base.comp.musl" ]; then \
-			$(MAKE) shader_slang shader_in="$$slang" shader_out="$$base.comp" stage=compute; \
+      echo "Compiling $$slang to compute shader"; \
+			slangc -target spirv -target glsl -fvk-use-scalar-layout -force-glsl-scalar-layout -validate-ir -no-mangle -entry computeMain -stage compute "$$slang" -o "$$base.comp.spv" -o "$$base.comp.glsl"; \
+      spirv-val "$$base.comp.spv" --relax-block-layout --scalar-block-layout --target-env vulkan1.3; \
 		fi; \
 	done
 
 # Builds the Slang shaders for all examples
 shaders_slang_all:
-	$(foreach example,$(examples),$(MAKE) shader_slang example=$(example);)
+	$(foreach example,$(examples),$(MAKE) shaders_slang example=$(example);)
 
 # ==== Individual examples ====
 

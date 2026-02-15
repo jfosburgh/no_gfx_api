@@ -167,6 +167,10 @@ main :: (vert_id: uint @vert_id, data: ^Data @data) -> Output
 }
 ```
 
+## Running examples
+
+Run `make run_example1`, `make run_example2`, etc. See the [Makefile](Makefile) for all available commands. Binaries for dependencies are included.
+
 ## Building
 
 To build this project, you will need
@@ -181,7 +185,5 @@ To build this project, you will need
 - [Linux] [GCC](https://gcc.gnu.org/)
 
 Run `make` to build dependencies, gpu_compiler, shaders and finally the examples. Make sure there are no errors.
-
-To iterate on individual examples incl. shaders, run `make example1`, `make example2`, etc. See the [Makefile](Makefile) for all available commands.
 
 Feel free to [contact me on discord](https://discord.com/users/leon2058) for any questions.
