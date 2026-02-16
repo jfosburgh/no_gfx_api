@@ -175,19 +175,14 @@ Run `make` to build all examples into the `build` directory.
 
 Run `make example1`, `make example2`, etc. to run individual examples.
 
-## Building
+## Building (Contributors only)
 
-To build this project, you will need
+To build this project, you will need:
 
 - [Odin >= 2026-02](https://odin-lang.org/)
 - [Vulkan SDK](https://vulkan.lunarg.com/)
-- [premake5](https://premake.github.io/download)
 - [make](https://www.gnu.org/software/make/)
-- [git](https://git-scm.com/)
-- [python3](https://www.python.org/)
-- [Windows] [Visual Studio 2022](https://visualstudio.microsoft.com/downloads/)
-- [Linux] [GCC](https://gcc.gnu.org/)
 
-Run `make full_build` to build dependencies, gpu_compiler, shaders and finally the examples. Make sure there are no errors. See the [Makefile](Makefile) for all available commands.
+See the [Makefile](Makefile) for all available commands.
 
 Feel free to [contact me on discord](https://discord.com/users/leon2058) for any questions.
