@@ -628,10 +628,36 @@ _init :: proc(validation := true, loc := #caller_location)
 
     // VMA allocator
     vma_vulkan_procs := vma.create_vulkan_functions()
+    // VMA validates KHR aliases; some loaders expose only core names on 1.1+.
+    if vma_vulkan_procs.get_buffer_memory_requirements2_khr == nil && vk.GetDeviceProcAddr != nil {
+        addr := vk.GetDeviceProcAddr(ctx.device, "vkGetBufferMemoryRequirements2")
+        if addr == nil do addr = vk.GetDeviceProcAddr(ctx.device, "vkGetBufferMemoryRequirements2KHR")
+        vma_vulkan_procs.get_buffer_memory_requirements2_khr = auto_cast addr
+    }
+    if vma_vulkan_procs.get_image_memory_requirements2_khr == nil && vk.GetDeviceProcAddr != nil {
+        addr := vk.GetDeviceProcAddr(ctx.device, "vkGetImageMemoryRequirements2")
+        if addr == nil do addr = vk.GetDeviceProcAddr(ctx.device, "vkGetImageMemoryRequirements2KHR")
+        vma_vulkan_procs.get_image_memory_requirements2_khr = auto_cast addr
+    }
+    if vma_vulkan_procs.bind_buffer_memory2_khr == nil && vk.GetDeviceProcAddr != nil {
+        addr := vk.GetDeviceProcAddr(ctx.device, "vkBindBufferMemory2")
+        if addr == nil do addr = vk.GetDeviceProcAddr(ctx.device, "vkBindBufferMemory2KHR")
+        vma_vulkan_procs.bind_buffer_memory2_khr = auto_cast addr
+    }
+    if vma_vulkan_procs.bind_image_memory2_khr == nil && vk.GetDeviceProcAddr != nil {
+        addr := vk.GetDeviceProcAddr(ctx.device, "vkBindImageMemory2")
+        if addr == nil do addr = vk.GetDeviceProcAddr(ctx.device, "vkBindImageMemory2KHR")
+        vma_vulkan_procs.bind_image_memory2_khr = auto_cast addr
+    }
+    if vma_vulkan_procs.get_physical_device_memory_properties2_khr == nil && vk.GetInstanceProcAddr != nil {
+        addr := vk.GetInstanceProcAddr(ctx.instance, "vkGetPhysicalDeviceMemoryProperties2")
+        if addr == nil do addr = vk.GetInstanceProcAddr(ctx.instance, "vkGetPhysicalDeviceMemoryProperties2KHR")
+        vma_vulkan_procs.get_physical_device_memory_properties2_khr = auto_cast addr
+    }
     ok_vma := vma.create_allocator({
         flags = { .Buffer_Device_Address },
         instance = ctx.instance,
-        vulkan_api_version = 1003000,  // 1.3
+        vulkan_api_version = vk.API_VERSION_1_3,
         physical_device = ctx.phys_device,
         device = ctx.device,
         vulkan_functions = &vma_vulkan_procs,

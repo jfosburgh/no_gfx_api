@@ -4,3 +4,12 @@
 *.raddbg_project
 *.glsl
 imgui.ini
+*.lib
+*.a
+*.so
+*.dylib
+*.dll
+*.spv
+build/*
+!build/SDL3.dll
+impl_enabled.odin
