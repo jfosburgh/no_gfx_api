@@ -39,7 +39,8 @@ main :: proc()
     window_size_x := i32(Start_Window_Size_X)
     window_size_y := i32(Start_Window_Size_Y)
 
-    gpu.init()
+    ok := gpu.init()
+    ensure(ok)
     defer gpu.cleanup()
 
     gpu.swapchain_init_from_sdl(window, Frames_In_Flight)

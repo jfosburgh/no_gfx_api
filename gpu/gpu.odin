@@ -250,7 +250,7 @@ Device_Limits :: struct
 // Procedures
 
 // Initialization and interaction with the OS.
-init: proc(validation := true, loc := #caller_location) : _init
+init: proc(validation := true, loc := #caller_location) -> bool : _init
 cleanup: proc(loc := #caller_location) : _cleanup
 wait_idle: proc() : _wait_idle
 swapchain_init: proc(surface: vk.SurfaceKHR, init_size: [2]u32, frames_in_flight: u32) : _swapchain_init

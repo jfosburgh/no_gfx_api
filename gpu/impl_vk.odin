@@ -196,7 +196,8 @@ ctx: Context
 @(private="file")
 vk_logger: log.Logger
 
-_init :: proc(validation := true, loc := #caller_location)
+@(require_results)
+_init :: proc(validation := true, loc := #caller_location) -> bool
 {
     scratch, _ := acquire_scratch()
 
@@ -208,19 +209,47 @@ _init :: proc(validation := true, loc := #caller_location)
 
     // Create instance
     {
-        layers := make([dynamic]cstring, allocator = scratch)
+        required_layers := make([dynamic]cstring, allocator = scratch)
+        optional_layers := make([dynamic]cstring, allocator = scratch)
         if ctx.validation {
-            append(&layers, "VK_LAYER_KHRONOS_validation")
+            append(&optional_layers, "VK_LAYER_KHRONOS_validation")
+        }
+        // NOTE: Emulation layer for the shader_object extension, will
+        // disable itself if it is actually supported.
+        append(&optional_layers, "VK_LAYER_KHRONOS_shader_object")
+
+        for opt in optional_layers {
+            if supports_layer(opt) {
+                append(&required_layers, opt)
+            }
+        }
+
+        if ctx.validation && !supports_layer("VK_LAYER_KHRONOS_validation") {
+            log.warn("init was called with validation = true, but Vulkan validation layers were not found (Did you install the Vulkan SDK?). Only high-level no_gfx validations will be performed.", location = loc)
         }
 
         required_extensions := make([dynamic]cstring, allocator = scratch)
         append(&required_extensions, vk.EXT_DEBUG_UTILS_EXTENSION_NAME)
         append(&required_extensions, vk.KHR_SURFACE_EXTENSION_NAME)
 
+        unsupported_extensions := make([dynamic]cstring, allocator = scratch)
+
         optional_extensions := make([dynamic]cstring, allocator = scratch)
         append(&optional_extensions, "VK_KHR_win32_surface")
         append(&optional_extensions, "VK_KHR_wayland_surface")
         append(&optional_extensions, "VK_KHR_xlib_surface")
+
+        // Check that required_extensions are supported
+        for req in required_extensions {
+            if !supports_instance_extension(req) {
+                append(&unsupported_extensions, req)
+            }
+        }
+
+        if len(unsupported_extensions) > 0 {
+            log_unsupported_extensions(unsupported_extensions[:], loc)
+            return false
+        }
 
         for opt in optional_extensions {
             if supports_instance_extension(opt) {
@@ -255,8 +284,8 @@ _init :: proc(validation := true, loc := #caller_location)
                 sType = .APPLICATION_INFO,
                 apiVersion = vk.API_VERSION_1_3,
             },
-            enabledLayerCount = u32(len(layers)),
-            ppEnabledLayerNames = raw_data(layers),
+            enabledLayerCount = u32(len(required_layers)),
+            ppEnabledLayerNames = raw_data(required_layers),
             enabledExtensionCount = u32(len(required_extensions)),
             ppEnabledExtensionNames = raw_data(required_extensions),
             pNext = next,
@@ -422,11 +451,27 @@ _init :: proc(validation := true, loc := #caller_location)
 
     // Device
     {
+        unsupported_extensions := make([dynamic]cstring, allocator = scratch)
+
         required_extensions := make([dynamic]cstring, allocator = scratch)
         append(&required_extensions, vk.KHR_SWAPCHAIN_EXTENSION_NAME)
         append(&required_extensions, vk.EXT_SHADER_OBJECT_EXTENSION_NAME)
         append(&required_extensions, vk.EXT_DESCRIPTOR_BUFFER_EXTENSION_NAME)
         append(&required_extensions, vk.KHR_DRAW_INDIRECT_COUNT_EXTENSION_NAME)
+
+        // Check that required extensions are present
+        for req in required_extensions {
+            if !supports_device_extension(req) {
+                append(&unsupported_extensions, req)
+            }
+        }
+
+        if len(unsupported_extensions) > 0 {
+            log_unsupported_extensions(unsupported_extensions[:], loc)
+            return false
+        }
+
+        // Add optional extensions
         if .Raytracing in ctx.features
         {
             append(&required_extensions, vk.KHR_DEFERRED_HOST_OPERATIONS_EXTENSION_NAME)
@@ -674,6 +719,8 @@ _init :: proc(validation := true, loc := #caller_location)
         }
     }
 
+    return true
+
     // From GLFW: https://github.com/glfw/glfw
     get_instance_proc_address :: proc "c"(p: rawptr, name: cstring) -> rawptr
     {
@@ -707,20 +754,66 @@ _init :: proc(validation := true, loc := #caller_location)
         return auto_cast addr
     }
 
+    supports_layer :: proc(name: cstring) -> bool
+    {
+        scratch, _ := acquire_scratch()
+
+        count: u32
+        vk_check(vk.EnumerateInstanceLayerProperties(&count, nil))
+        available_layers := make([]vk.LayerProperties, count, allocator = scratch)
+        vk_check(vk.EnumerateInstanceLayerProperties(&count, raw_data(available_layers)))
+
+        for &available in available_layers {
+            if name == cstring(&available.layerName[0]) do return true
+        }
+
+        return false
+    }
+
     supports_instance_extension :: proc(name: cstring) -> bool
     {
-        count: u32;
-        vk_check(vk.EnumerateInstanceExtensionProperties(nil, &count, nil))
+        scratch, _ := acquire_scratch()
 
-        available_extensions := make([]vk.ExtensionProperties, count)
-        defer delete(available_extensions)
+        count: u32
+        vk_check(vk.EnumerateInstanceExtensionProperties(nil, &count, nil))
+        available_extensions := make([]vk.ExtensionProperties, count, allocator = scratch)
         vk_check(vk.EnumerateInstanceExtensionProperties(nil, &count, raw_data(available_extensions)))
 
         for &available in available_extensions {
             if name == cstring(&available.extensionName[0]) do return true
         }
-
         return false
+    }
+
+    supports_device_extension :: proc(name: cstring) -> bool
+    {
+        scratch, _ := acquire_scratch()
+
+        count: u32
+        vk_check(vk.EnumerateDeviceExtensionProperties(ctx.phys_device, nil, &count, nil))
+        available_extensions := make([]vk.ExtensionProperties, count, allocator = scratch)
+        vk_check(vk.EnumerateDeviceExtensionProperties(ctx.phys_device, nil, &count, raw_data(available_extensions)))
+        for &available in available_extensions {
+            if name == cstring(&available.extensionName[0]) do return true
+        }
+        return false
+    }
+
+    log_unsupported_extensions :: proc(unsupported: []cstring, loc: runtime.Source_Code_Location)
+    {
+        if len(unsupported) <= 0 do return
+        if !ctx.validation do return
+
+        sb := strings.builder_make_none()
+        defer strings.builder_destroy(&sb)
+
+        strings.write_string(&sb, "This device is not supported by no_gfx as it is missing the following critical Vulkan extensions:\n")
+        for ext in unsupported
+        {
+            strings.write_string(&sb, string(ext))
+            strings.write_string(&sb, "\n")
+        }
+        log.error(strings.to_string(sb), location = loc)
     }
 }
 
