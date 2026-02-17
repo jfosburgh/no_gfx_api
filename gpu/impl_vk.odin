@@ -375,9 +375,9 @@ _init :: proc(validation := true, loc := #caller_location)
     }
 
     // Check descriptor sizes
-    ensure(desc_buf_props.storageImageDescriptorSize <= 32, "Unexpected storage image descriptor size.")
-    ensure(desc_buf_props.sampledImageDescriptorSize <= 32, "Unexpected sampled texture descriptor size.")
-    ensure(desc_buf_props.samplerDescriptorSize <= 16, "Unexpected sampler descriptor size.")
+    ensure(desc_buf_props.storageImageDescriptorSize <= size_of(Texture_Descriptor), "Unexpected storage image descriptor size.")
+    ensure(desc_buf_props.sampledImageDescriptorSize <= size_of(Texture_Descriptor), "Unexpected sampled texture descriptor size.")
+    ensure(desc_buf_props.samplerDescriptorSize <= size_of(Sampler_Descriptor), "Unexpected sampler descriptor size.")
     if .Raytracing in ctx.features {
         ensure(desc_buf_props.accelerationStructureDescriptorSize <= 32, "Unexpected BVH descriptor size.")
     }
