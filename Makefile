@@ -10,9 +10,9 @@ else
 exe_extension :=
 endif
 
-default: vercheck build
+default: vercheck check_gpu build
 
-full_build: vercheck_native build_vma build_imgui build
+full_build: vercheck_native build_vma build_imgui check_gpu build
 
 # Verifies that all dependencies are installed
 vercheck:
@@ -23,7 +23,7 @@ vercheck:
 	vulkaninfo --summary
 
 # Verifies that all dependencies neede to build native dependencies are installed
-vercheck_native: vercheck vercheck_platform 
+vercheck_native: vercheck vercheck_platform
 	premake5 --version
 	python3 --version
 	git --version
@@ -49,6 +49,10 @@ check:
 
 check_example:
 	odin check examples/$(example)
+
+# Checks that no_gfx compiles without errors
+check_gpu:
+	odin check gpu -no-entry-point
 
 # Builds all examples
 build:
