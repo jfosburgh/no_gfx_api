@@ -3,7 +3,6 @@
 package gpu
 
 import vk "vendor:vulkan"
-import "core:sync"
 import "base:runtime"
 
 to_vk_shader_stage :: #force_inline proc(type: Shader_Type_Graphics) -> vk.ShaderStageFlags

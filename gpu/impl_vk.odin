@@ -4,13 +4,10 @@ package gpu
 import "core:slice"
 import "core:log"
 import "base:runtime"
-import vmem "core:mem/virtual"
-import "core:mem"
 import "core:sync"
 import "core:dynlib"
 import "core:container/priority_queue"
 import "core:strings"
-import "core:math"
 import "core:fmt"
 import intr "base:intrinsics"
 
@@ -272,40 +269,42 @@ _init :: proc(validation := true, loc := #caller_location)
     }
 
     // Physical device
-    phys_device_count: u32
-    vk_check(vk.EnumeratePhysicalDevices(ctx.instance, &phys_device_count, nil))
-    if phys_device_count == 0 do fatal_error("Did not find any GPUs!")
-    phys_devices := make([]vk.PhysicalDevice, phys_device_count, allocator = scratch)
-    vk_check(vk.EnumeratePhysicalDevices(ctx.instance, &phys_device_count, raw_data(phys_devices)))
-
-    found := false
-    best_score: u32
-    device_loop: for candidate in phys_devices
     {
-        score: u32
+        phys_device_count: u32
+        vk_check(vk.EnumeratePhysicalDevices(ctx.instance, &phys_device_count, nil))
+        if phys_device_count == 0 do fatal_error("Did not find any GPUs!")
+        phys_devices := make([]vk.PhysicalDevice, phys_device_count, allocator = scratch)
+        vk_check(vk.EnumeratePhysicalDevices(ctx.instance, &phys_device_count, raw_data(phys_devices)))
 
-        properties := vk.PhysicalDeviceProperties2 { sType = .PHYSICAL_DEVICE_PROPERTIES_2 }
-        features := vk.PhysicalDeviceFeatures2 { sType = .PHYSICAL_DEVICE_FEATURES_2 }
-        vk.GetPhysicalDeviceProperties2(candidate, &properties);
-        vk.GetPhysicalDeviceFeatures2(candidate, &features);
-
-        #partial switch properties.properties.deviceType
+        found := false
+        best_score: u32
+        device_loop: for candidate in phys_devices
         {
-            case .DISCRETE_GPU:   score += 1000
-            case .VIRTUAL_GPU:    score += 100
-            case .INTEGRATED_GPU: score += 10
-            case: {}
+            score: u32
+
+            properties := vk.PhysicalDeviceProperties2 { sType = .PHYSICAL_DEVICE_PROPERTIES_2 }
+            features := vk.PhysicalDeviceFeatures2 { sType = .PHYSICAL_DEVICE_FEATURES_2 }
+            vk.GetPhysicalDeviceProperties2(candidate, &properties);
+            vk.GetPhysicalDeviceFeatures2(candidate, &features);
+
+            #partial switch properties.properties.deviceType
+            {
+                case .DISCRETE_GPU:   score += 1000
+                case .VIRTUAL_GPU:    score += 100
+                case .INTEGRATED_GPU: score += 10
+                case: {}
+            }
+
+            if best_score < score
+            {
+                best_score = score
+                ctx.phys_device = candidate
+                found = true
+            }
         }
 
-        if best_score < score
-        {
-            best_score = score
-            ctx.phys_device = candidate
-            found = true
-        }
+        if !found do fatal_error("Could not find suitable GPU.")
     }
-
-    if !found do fatal_error("Could not find suitable GPU.")
 
     raytracing_extensions := []cstring {
         vk.KHR_DEFERRED_HOST_OPERATIONS_EXTENSION_NAME,
@@ -771,7 +770,7 @@ _cleanup :: proc(loc := #caller_location)
             if tls_context != nil {
                 for type in Queue {
                     buffers := make([dynamic]vk.CommandBuffer, len(tls_context.buffers[type]), scratch)
-                    for buf, i in tls_context.buffers[type] {
+                    for buf in tls_context.buffers[type] {
                         cmd_buf_info := pool_get(&ctx.command_buffers, buf)
                         append(&buffers, cmd_buf_info.handle)
                     }
@@ -959,7 +958,7 @@ _swapchain_acquire_next :: proc() -> Texture
         cmd_buf := vk_acquire_cmd_buf(.Main)
         cmd_buf_info := pool_get(&ctx.command_buffers, cmd_buf)
 
-        vk_cmd_buf := transmute(vk.CommandBuffer) cmd_buf_info.handle
+        vk_cmd_buf := cmd_buf_info.handle
 
         cmd_buf_bi := vk.CommandBufferBeginInfo {
             sType = .COMMAND_BUFFER_BEGIN_INFO,
@@ -1003,8 +1002,6 @@ _swapchain_acquire_next :: proc() -> Texture
 
 _swapchain_present :: proc(queue: Queue, sem_wait: Semaphore, wait_value: u64)
 {
-    tls_ctx := get_tls()
-
     queue_info := ctx.queues[queue]
     vk_queue := queue_info.handle
 
@@ -1287,7 +1284,6 @@ _texture_create :: proc(desc: Texture_Desc, storage: gpuptr, queue: Queue = .Mai
 
     desc_clean := texture_desc_cleanup(desc)
 
-    vk_signal_sem := pool_get(&ctx.semaphores, signal_sem) if signal_sem != {} else vk.Semaphore(0)
     queue_to_use := queue
     alloc_info := pool_get(&ctx.allocs, transmute(Alloc_Handle) storage._impl[0])
 
@@ -1643,7 +1639,6 @@ _shader_create_compute :: proc(code: []u32, group_size_x: u32, group_size_y: u32
 
 _shader_destroy :: proc(shader: Shader, loc := #caller_location)
 {
-    tls := get_tls()
     shader_info := pool_get(&ctx.shaders, shader)
     vk_shader := shader_info.handle
     vk.DestroyShaderEXT(ctx.device, vk_shader, nil)
@@ -2976,8 +2971,6 @@ vk_acquire_cmd_buf :: proc(queue: Queue) -> Command_Buffer
     tls_ctx := get_tls()
     sync.guard(&ctx.lock)
 
-    queue_info := ctx.queues[queue]
-
     // Check whether there is a free command buffer available with a timeline value that is less than or equal to the current semaphore value
     if handle, ok := priority_queue.pop_safe(&tls_ctx.free_buffers[queue]); ok {
         cmd_buf_info, r_lock := pool_get_mut(&ctx.command_buffers, handle.pool_handle); sync.guard(r_lock)
@@ -3034,8 +3027,6 @@ vk_submit_cmd_bufs :: proc(cmd_bufs: []Command_Buffer)
 
     // NOTE: Submissions must be performed in order w.r.t the timeline value used.
     sync.guard(&ctx.lock)
-
-    tls_ctx := get_tls()
 
     for cmd_buf in cmd_bufs
     {

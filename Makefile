@@ -52,7 +52,7 @@ check_example:
 
 # Checks that no_gfx compiles without errors
 check_gpu:
-	odin check gpu -no-entry-point
+	odin check gpu -no-entry-point -vet
 
 # Builds all examples
 build:

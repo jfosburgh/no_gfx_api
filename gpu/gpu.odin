@@ -1,7 +1,6 @@
 
 package gpu
 
-import "core:slice"
 import "base:runtime"
 import intr "base:intrinsics"
 
