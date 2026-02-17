@@ -3,6 +3,7 @@ package gpu
 
 import "base:runtime"
 import intr "base:intrinsics"
+import "core:slice"
 
 import sdl "vendor:sdl3"
 import vk "vendor:vulkan"
@@ -350,6 +351,9 @@ cmd_build_tlas: proc(cmd_buf: Command_Buffer, bvh: BVH, bvh_storage, scratch_sto
 
 /////////////////////////
 // Userland Utilities
+
+// Otherwise -vet complains, it's only used in generics.
+_fictitious :: proc() { slice.swap([]int {}, 1, 2) }
 
 // Memory
 
