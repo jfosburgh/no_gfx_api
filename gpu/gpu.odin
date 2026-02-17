@@ -475,7 +475,7 @@ arena_alloc_raw :: proc(arena: ^Arena, #any_int el_size: i64, #any_int el_count:
     gpu_addr := uintptr(block.p.gpu.ptr) + uintptr(arena.offset)
     arena.offset = i64(align_up(u64(gpu_addr), u64(align)) - u64(uintptr(block.p.gpu.ptr)))
     if arena.offset + bytes > block.size {
-        block = arena_next_block(arena, bytes)
+        block = arena_next_block(arena, bytes, align)
         arena.offset = 0
     }
 
@@ -490,14 +490,14 @@ arena_alloc_raw :: proc(arena: ^Arena, #any_int el_size: i64, #any_int el_count:
         return (x + (align - 1)) &~ (align - 1)
     }
 
-    arena_next_block :: proc(arena: ^Arena, bytes: i64) -> Arena_Block
+    arena_next_block :: proc(arena: ^Arena, bytes: i64, align: i32) -> Arena_Block
     {
         arena.block_idx += 1
         arena.offset = 0
         if arena.block_idx >= i64(len(arena.blocks))
         {
             new_size := max(arena.block_size, bytes)
-            new_p := mem_alloc_raw(new_size, 1, 16, mem_type = arena.mem_type)
+            new_p := mem_alloc_raw(new_size, 1, align, mem_type = arena.mem_type)
             new_block := Arena_Block { p = new_p, size = new_size }
             append(&arena.blocks, new_block)
             return new_block
@@ -512,7 +512,7 @@ arena_alloc_raw :: proc(arena: ^Arena, #any_int el_size: i64, #any_int el_count:
             {
                 mem_free_raw(arena.blocks[arena.block_idx].p.gpu)
                 new_size := max(arena.block_size, bytes)
-                new_p := mem_alloc_raw(new_size, 1, 16, mem_type = arena.mem_type)
+                new_p := mem_alloc_raw(new_size, 1, align, mem_type = arena.mem_type)
                 new_block := Arena_Block { p = new_p, size = new_size }
                 arena.blocks[arena.block_idx] = new_block
                 return new_block
