@@ -14,7 +14,8 @@ The API is straightforward to use:
 
 ```odin
 // --- Initialization
-gpu.init()
+ok := gpu.init()
+ensure(ok)
 defer gpu.cleanup()
 gpu.swapchain_init(/* surface */, Frames_In_Flight)
 
