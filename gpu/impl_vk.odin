@@ -2463,6 +2463,34 @@ _cmd_set_blend_state :: proc(cmd_buf: Command_Buffer, state: Blend_State, loc :=
     vk.CmdSetColorWriteMaskEXT(vk_cmd_buf, 0, 1, &color_write_mask)
 }
 
+_cmd_set_viewport :: proc(cmd_buf: Command_Buffer, viewport: Viewport, loc := #caller_location)
+{
+    if ctx.validation
+    {
+        ok := true
+        ok &= pool_check(&ctx.command_buffers, cmd_buf, "cmd_buf", loc)
+        if !ok do return
+    }
+
+    vk_cmd_buf := pool_get(&ctx.command_buffers, cmd_buf).handle
+    vk_viewport := to_vk_viewport(viewport)
+    vk.CmdSetViewportWithCount(vk_cmd_buf, 1, &vk_viewport)
+}
+
+_cmd_set_scissor :: proc(cmd_buf: Command_Buffer, scissor: Rect_2D, loc := #caller_location)
+{
+    if ctx.validation
+    {
+        ok := true
+        ok &= pool_check(&ctx.command_buffers, cmd_buf, "cmd_buf", loc)
+        if !ok do return
+    }
+
+    vk_cmd_buf := pool_get(&ctx.command_buffers, cmd_buf).handle
+    vk_scissor := to_vk_rect_2D(scissor)
+    vk.CmdSetScissorWithCount(vk_cmd_buf, 1, &vk_scissor)
+}
+
 _cmd_set_compute_shader :: proc(cmd_buf: Command_Buffer, compute_shader: Shader, loc := #caller_location)
 {
     if ctx.validation

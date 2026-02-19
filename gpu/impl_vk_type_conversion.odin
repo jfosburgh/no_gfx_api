@@ -300,3 +300,20 @@ to_vk_image_create_info :: proc(desc: Texture_Desc) -> vk.ImageCreateInfo
         initialLayout = .UNDEFINED,
     }
 }
+
+to_vk_viewport :: proc(viewport: Viewport) -> vk.Viewport
+{
+    return {
+        x = viewport.origin.x, y = viewport.origin.y,
+        width = viewport.size.x, height = viewport.size.y,
+        minDepth = viewport.depth_min, maxDepth = viewport.depth_max,
+    }
+}
+
+to_vk_rect_2D :: proc(rect: Rect_2D) -> vk.Rect2D
+{
+    return {
+        offset = { rect.offset.x, rect.offset.y },
+        extent = { rect.size.x, rect.size.y },
+    }
+}

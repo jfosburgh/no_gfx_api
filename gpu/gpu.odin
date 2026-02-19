@@ -29,22 +29,23 @@ Allocation_Type :: enum { Default = 0, Descriptors }
 Memory :: enum { Default = 0, GPU, Readback }
 Queue :: enum { Main = 0, Compute, Transfer }
 Texture_Type :: enum { D2 = 0, D3, D1 }
-Texture_Format :: enum {
-	Default = 0,
-	RGBA8_Unorm,
-	BGRA8_Unorm,
-	RGBA8_SRGB,
-	D32_Float,
-	RGBA16_Float,
-	RGBA32_Float,
-	BC1_RGBA_Unorm,
-	BC3_RGBA_Unorm,
-	BC7_RGBA_Unorm,
-	ASTC_4x4_RGBA_Unorm,
-	ETC2_RGB8_Unorm,
-	ETC2_RGBA8_Unorm,
-	EAC_R11_Unorm,
-	EAC_RG11_Unorm,
+Texture_Format :: enum
+{
+    Default = 0,
+    RGBA8_Unorm,
+    BGRA8_Unorm,
+    RGBA8_SRGB,
+    D32_Float,
+    RGBA16_Float,
+    RGBA32_Float,
+    BC1_RGBA_Unorm,
+    BC3_RGBA_Unorm,
+    BC7_RGBA_Unorm,
+    ASTC_4x4_RGBA_Unorm,
+    ETC2_RGB8_Unorm,
+    ETC2_RGBA8_Unorm,
+    EAC_R11_Unorm,
+    EAC_RG11_Unorm,
 }
 Usage :: enum { Sampled = 0, Storage, Transfer_Src, Color_Attachment, Depth_Stencil_Attachment }
 Usage_Flags :: bit_set[Usage; u32]
@@ -70,11 +71,21 @@ BVH_Hint :: enum { Default = 0, Prefer_Fast_Trace, Prefer_Fast_Build, Prefer_Low
 BVH_Capability :: enum { Update = 0, Compaction }
 BVH_Capabilities :: distinct bit_set[BVH_Capability; u32]
 
-// Constants
-All_Mips: u8 : max(u8)
-All_Layers: u16 : max(u16)
-
 // Structs
+
+Viewport :: struct
+{
+    origin: [2]f32,
+    size: [2]f32,
+    depth_min: f32,
+    depth_max: f32,
+}
+
+Rect_2D :: struct
+{
+    offset: [2]i32,
+    size: [2]u32,
+}
 
 Blit_Rect :: struct
 {
@@ -86,10 +97,10 @@ Blit_Rect :: struct
 }
 
 Mip_Copy_Region :: struct {
-	src_offset:  u64, // Offset in staging buffer
-	mip_level:   u32,
-	array_layer: u32,
-	layer_count: u32,
+    src_offset:  u64, // Offset in staging buffer
+    mip_level:   u32,
+    array_layer: u32,
+    layer_count: u32,
 }
 
 Texture_Desc :: struct
@@ -122,9 +133,9 @@ Texture_View_Desc :: struct
     type: Texture_Type,
     format: Texture_Format,  // .Default = inherits the texture's format
     base_mip: u32,
-    mip_count: u8,     // 0 = All_Mips
+    mip_count: u8,     // 0 = all mips
     base_layer: u16,
-    layer_count: u16,  // 0 = All_Layers
+    layer_count: u16,  // 0 = all layers
 }
 
 Render_Attachment :: struct
@@ -328,6 +339,8 @@ cmd_set_shaders: proc(cmd_buf: Command_Buffer, vert_shader: Shader, frag_shader:
 cmd_set_compute_shader: proc(cmd_buf: Command_Buffer, compute_shader: Shader, loc := #caller_location) : _cmd_set_compute_shader
 cmd_set_depth_state: proc(cmd_buf: Command_Buffer, state: Depth_State, loc := #caller_location) : _cmd_set_depth_state
 cmd_set_blend_state: proc(cmd_buf: Command_Buffer, state: Blend_State, loc := #caller_location) : _cmd_set_blend_state
+cmd_set_viewport: proc(cmd_buf: Command_Buffer, viewport: Viewport, loc := #caller_location) : _cmd_set_viewport
+cmd_set_scissor: proc(cmd_buf: Command_Buffer, scissor: Rect_2D, loc := #caller_location) : _cmd_set_scissor
 
 // Run compute shader based on number of groups
 cmd_dispatch: proc(cmd_buf: Command_Buffer, compute_data: gpuptr, num_groups_x: u32, num_groups_y: u32 = 1, num_groups_z: u32 = 1, loc := #caller_location) : _cmd_dispatch
