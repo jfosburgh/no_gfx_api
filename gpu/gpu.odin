@@ -681,3 +681,25 @@ cmd_generate_mipmaps :: proc(cmd_buf: Command_Buffer, texture: Texture)
         cmd_blit_texture(cmd_buf, texture, texture, { src }, { dst }, .Linear)
     }
 }
+
+// Scoped procs
+
+@(private="file")
+Scoped_Render_Pass_Out :: struct
+{
+    cmd_buf: Command_Buffer,
+    loc: runtime.Source_Code_Location,
+}
+
+@(deferred_out = cmd_scoped_render_pass_end)
+cmd_scoped_render_pass :: #force_inline proc(cmd_buf: Command_Buffer, desc: Render_Pass_Desc, loc := #caller_location) -> Scoped_Render_Pass_Out
+{
+    cmd_begin_render_pass(cmd_buf, desc, loc)
+    return { cmd_buf, loc }
+}
+
+@(private="file")
+cmd_scoped_render_pass_end :: #force_inline proc(scope_out: Scoped_Render_Pass_Out)
+{
+    cmd_end_render_pass(scope_out.cmd_buf, scope_out.loc)
+}
