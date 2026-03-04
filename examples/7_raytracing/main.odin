@@ -74,7 +74,7 @@ main :: proc()
     bvh_scratch_arena := gpu.arena_init(mem_type = .GPU)
     defer gpu.arena_destroy(&bvh_scratch_arena)
 
-    gltf_scene, _, gltf_data := shared.load_scene_gltf(Sponza_Scene)
+    gltf_scene, _, gltf_data := shared.load_scene_gltf(Sponza_Scene, 0)
     defer {
         shared.destroy_scene(&gltf_scene)
         gltf2.unload(gltf_data)
