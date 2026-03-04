@@ -80,6 +80,9 @@ main :: proc()
         gltf2.unload(gltf_data)
     }
 
+    desc_pool := gpu.desc_pool_create()
+    defer gpu.desc_pool_destroy(&desc_pool)
+
     // Create a texture for the compute shader to write to
     output_desc := gpu.Texture_Desc {
         type = .D2,
@@ -90,33 +93,6 @@ main :: proc()
     output_texture := gpu.texture_alloc_and_create(output_desc)
     defer gpu.texture_free_and_destroy(&output_texture)
 
-    // Create texture descriptor for RW access (compute shader)
-    texture_rw_desc := gpu.texture_rw_view_descriptor(output_texture, {})
-
-    texture_id := u32(0)
-    sampler_id := u32(0)
-
-    // Allocate texture heap for compute shader
-    texture_rw_heap_size := gpu.texture_rw_view_descriptor_size()
-    texture_rw_heap := gpu.mem_alloc_raw(texture_rw_heap_size, 10, 64, alloc_type = .Descriptors)
-    defer gpu.mem_free_raw(texture_rw_heap)
-    gpu.set_texture_rw_desc(texture_rw_heap, texture_id, texture_rw_desc)
-
-    // Create texture descriptor for sampled access (fragment shader)
-    texture_desc := gpu.texture_view_descriptor(output_texture, {})
-
-    // Allocate texture heap for fragment shader
-    texture_heap_size := gpu.texture_view_descriptor_size()
-    texture_heap := gpu.mem_alloc_raw(texture_heap_size, 65536, 64, alloc_type = .Descriptors)
-    defer gpu.mem_free_raw(texture_heap)
-    gpu.set_texture_desc(texture_heap, texture_id, texture_desc)
-
-    // Create sampler
-    sampler_heap_size := gpu.sampler_descriptor_size()
-    sampler_heap := gpu.mem_alloc_raw(sampler_heap_size, 10, 64, alloc_type = .Descriptors)
-    defer gpu.mem_free_raw(sampler_heap)
-    gpu.set_sampler_desc(sampler_heap, sampler_id, gpu.sampler_descriptor({}))
-
     // BVH descriptor heap
     bvh_heap_size := gpu.bvh_descriptor_size()
     bvh_heap := gpu.mem_alloc_raw(bvh_heap_size, 10, 64, alloc_type = .Descriptors)
@@ -124,6 +100,7 @@ main :: proc()
 
     Compute_Data :: struct {
         output_texture_id: u32,
+        tlas_id: u32,
         scene: Scene_Shader,
         resolution: [2]f32,
         accum_counter: u32,
@@ -173,7 +150,10 @@ main :: proc()
     gpu.cmd_barrier(upload_cmd_buf, .Transfer, .All, {})
     gpu.queue_submit(.Main, { upload_cmd_buf })
 
-    gpu.set_bvh_desc(bvh_heap, 0, gpu.bvh_descriptor(scene.bvh))
+    texture_id := gpu.desc_pool_alloc_texture(&desc_pool, gpu.texture_view_descriptor(output_texture, {}))
+    texture_rw_id := gpu.desc_pool_alloc_texture_rw(&desc_pool, gpu.texture_rw_view_descriptor(output_texture, {}))
+    sampler_id := gpu.desc_pool_alloc_sampler(&desc_pool, gpu.sampler_descriptor({}))
+    bvh_id := gpu.desc_pool_alloc_bvh(&desc_pool, gpu.bvh_descriptor(scene.bvh))
 
     now_ts := sdl.GetPerformanceCounter()
     total_time: f32 = 0.0
@@ -217,10 +197,8 @@ main :: proc()
             output_texture = gpu.texture_alloc_and_create(output_desc)
 
             // Update descriptor for new texture
-            texture_desc = gpu.texture_view_descriptor(output_texture, {})
-            texture_rw_desc := gpu.texture_rw_view_descriptor(output_texture, {})
-            gpu.set_texture_desc(texture_heap, texture_id, texture_desc)
-            gpu.set_texture_rw_desc(texture_rw_heap, texture_id, texture_rw_desc)
+            gpu.desc_pool_update_texture(&desc_pool, texture_id, gpu.texture_view_descriptor(output_texture, {}))
+            gpu.desc_pool_update_texture_rw(&desc_pool, texture_rw_id, gpu.texture_rw_view_descriptor(output_texture, {}))
 
             accum_counter = 0
         }
@@ -242,18 +220,19 @@ main :: proc()
 
         // Allocate compute data for this frame with current time and resolution
         compute_data := gpu.arena_alloc(frame_arena, Compute_Data)
-        compute_data.cpu.output_texture_id = texture_id
+        compute_data.cpu.output_texture_id = texture_rw_id
+        compute_data.cpu.tlas_id = bvh_id
         compute_data.cpu.scene = { instances = scene.instances.gpu.ptr, meshes = scene.meshes_shader.gpu.ptr }
         compute_data.cpu.accum_counter = accum_counter
         compute_data.cpu.resolution = { f32(window_size_x), f32(window_size_y) }
         compute_data.cpu.camera_to_world = intr.matrix_flatten(camera_to_world)
 
         cmd_buf := gpu.commands_begin(.Main)
+        gpu.cmd_set_desc_pool(cmd_buf, desc_pool)
 
         if accum_counter < max_accums
         {
             // Dispatch compute shader to write to texture
-            gpu.cmd_set_desc_heap(cmd_buf, {}, texture_rw_heap, {}, bvh_heap)
             gpu.cmd_set_compute_shader(cmd_buf, pathtrace_shader)
 
             num_groups_x := (u32(window_size_x) + group_size_x - 1) / group_size_x
@@ -273,7 +252,6 @@ main :: proc()
             }
         })
         gpu.cmd_set_shaders(cmd_buf, vert_shader, frag_shader)
-        gpu.cmd_set_desc_heap(cmd_buf, texture_heap, {}, sampler_heap, {})
 
         Vert_Data :: struct {
             verts: rawptr,

@@ -60,6 +60,9 @@ main :: proc()
         gpu.shader_destroy(frag_shader)
     }
 
+    desc_pool := gpu.desc_pool_create()
+    defer gpu.desc_pool_destroy(&desc_pool)
+
     // Create a texture for the compute shader to write to
     output_desc := gpu.Texture_Desc {
         dimensions = { u32(window_size_x), u32(window_size_y), 1 },
@@ -69,31 +72,11 @@ main :: proc()
     output_texture := gpu.texture_alloc_and_create(output_desc)
     defer gpu.texture_free_and_destroy(&output_texture)
 
-    // Create texture descriptor for RW access (compute shader)
-    texture_rw_desc := gpu.texture_rw_view_descriptor(output_texture, {})
-
-    texture_id := u32(0)
-    sampler_id := u32(0)
-
-    // Allocate texture heap for compute shader
-    texture_rw_heap_size := gpu.texture_rw_view_descriptor_size()
-    texture_rw_heap := gpu.mem_alloc_raw(texture_rw_heap_size, 10, 64, alloc_type = .Descriptors)
-    defer gpu.mem_free_raw(texture_rw_heap)
-    gpu.set_texture_rw_desc(texture_rw_heap, texture_id, texture_rw_desc)
-
     // Create texture descriptor for sampled access (fragment shader)
-    texture_desc := gpu.texture_view_descriptor(output_texture, { format = .RGBA8_Unorm })
-
-    // Allocate texture heap for fragment shader
-    texture_heap_size := gpu.texture_view_descriptor_size()
-    texture_heap := gpu.mem_alloc_raw(texture_heap_size, 65536, 64, alloc_type = .Descriptors)
-    defer gpu.mem_free_raw(texture_heap)
-    gpu.set_texture_desc(texture_heap, texture_id, texture_desc)
-
-    // Create sampler
-    sampler_heap := gpu.mem_alloc_raw(size_of(gpu.Sampler_Descriptor), 10, 64, alloc_type = .Descriptors)
-    defer gpu.mem_free_raw(sampler_heap)
-    gpu.set_sampler_desc(sampler_heap, sampler_id, gpu.sampler_descriptor({}))
+    texture_id := gpu.desc_pool_alloc_texture(&desc_pool, gpu.texture_view_descriptor(output_texture, {}))
+    // Create texture descriptor for RW access (compute shader)
+    texture_rw_id := gpu.desc_pool_alloc_texture_rw(&desc_pool, gpu.texture_rw_view_descriptor(output_texture, {}))
+    sampler_id := gpu.desc_pool_alloc_sampler(&desc_pool, gpu.sampler_descriptor({}))
 
     // Indirect dispatch command (group counts)
     indirect_dispatch_command := gpu.mem_alloc(gpu.Dispatch_Indirect_Command)
@@ -179,10 +162,8 @@ main :: proc()
             output_texture = gpu.texture_alloc_and_create(output_desc)
 
             // Update descriptor for new texture
-            texture_desc = gpu.texture_view_descriptor(output_texture, {})
-            texture_rw_desc := gpu.texture_rw_view_descriptor(output_texture, {})
-            gpu.set_texture_desc(texture_heap, texture_id, texture_desc)
-            gpu.set_texture_rw_desc(texture_rw_heap, texture_id, texture_rw_desc)
+            gpu.desc_pool_update_texture(&desc_pool, texture_id, gpu.texture_view_descriptor(output_texture, {}))
+            gpu.desc_pool_update_texture_rw(&desc_pool, texture_rw_id, gpu.texture_rw_view_descriptor(output_texture, {}))
         }
 
         swapchain := gpu.swapchain_acquire_next()  // Blocks CPU until at least one frame is available.
@@ -197,14 +178,15 @@ main :: proc()
 
         // Allocate compute data for this frame with current time and resolution
         compute_data := gpu.arena_alloc(frame_arena, Compute_Data)
-        compute_data.cpu.output_texture_id = texture_id
+        compute_data.cpu.output_texture_id = texture_rw_id
         compute_data.cpu.resolution = { f32(window_size_x), f32(window_size_y) }
         compute_data.cpu.time = total_time
 
         cmd_buf := gpu.commands_begin(.Main)
 
+        gpu.cmd_set_desc_pool(cmd_buf, desc_pool)
+
         // Dispatch compute shader to write to texture
-        gpu.cmd_set_desc_heap(cmd_buf, {}, texture_rw_heap, {}, {})
         gpu.cmd_set_compute_shader(cmd_buf, compute_shader)
 
         num_groups_x := (u32(window_size_x) + group_size_x - 1) / group_size_x
@@ -233,7 +215,6 @@ main :: proc()
             }
         })
         gpu.cmd_set_shaders(cmd_buf, vert_shader, frag_shader)
-        gpu.cmd_set_desc_heap(cmd_buf, texture_heap, {}, sampler_heap, {})
 
         Vert_Data :: struct {
             verts: rawptr,

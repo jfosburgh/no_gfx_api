@@ -77,14 +77,10 @@ main :: proc()
         gpu.mem_free(indices_local)
     }
 
-    texture_heap_size := gpu.texture_view_descriptor_size()
-    texture_heap := gpu.mem_alloc_raw(texture_heap_size, 65536, 64, alloc_type = .Descriptors)
-    defer gpu.mem_free_raw(texture_heap)
-    sampler_heap_size := gpu.sampler_descriptor_size()
-    sampler_heap := gpu.mem_alloc_raw(sampler_heap_size, 10, 64, alloc_type = .Descriptors)
-    defer gpu.mem_free_raw(sampler_heap)
+    desc_pool := gpu.desc_pool_create()
+    defer gpu.desc_pool_destroy(&desc_pool)
 
-    gpu.set_sampler_desc(sampler_heap, 0, gpu.sampler_descriptor({}))
+    sampler_id := gpu.desc_pool_alloc_sampler(&desc_pool, gpu.sampler_descriptor({}))
 
     upload_cmd_buf := gpu.commands_begin(.Main)
     gpu.cmd_mem_copy(upload_cmd_buf, verts_local, verts, 3)
@@ -153,6 +149,8 @@ main :: proc()
         swapchain := gpu.swapchain_acquire_next()
 
         cmd_buf := gpu.commands_begin(.Main)
+        gpu.cmd_set_desc_pool(cmd_buf, desc_pool)
+
         gpu.cmd_begin_render_pass(cmd_buf, {
             color_attachments = {
                 { texture = swapchain, clear_color = background_color }
@@ -161,7 +159,6 @@ main :: proc()
 
         // Render triangle
         gpu.cmd_set_shaders(cmd_buf, vert_shader, frag_shader)
-        gpu.cmd_set_desc_heap(cmd_buf, texture_heap, {}, sampler_heap, {})
         Vert_Data :: struct {
             verts: rawptr,
         }

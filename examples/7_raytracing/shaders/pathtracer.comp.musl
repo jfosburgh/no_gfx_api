@@ -20,6 +20,7 @@ Instance :: struct
 Data :: struct
 {
     output_texture_id: textureid,
+    tlas_id: bvh_id,
     scene: Scene,
     resolution: vec2,
     accum_counter: uint,
@@ -43,7 +44,7 @@ main :: (data: ^Data @data, global_invocation_id: vec3 @global_invocation_id)
     camera_ray: Ray;
     camera_ray.ori = world_camera_pos;
     camera_ray.dir = world_camera_lookat;
-    color := pathtrace(camera_ray, data.scene);
+    color := pathtrace(camera_ray, data.tlas_id, data.scene);
 
     if global_invocation_id.x < data.resolution.x && global_invocation_id.y < data.resolution.y
     {
@@ -59,7 +60,7 @@ main :: (data: ^Data @data, global_invocation_id: vec3 @global_invocation_id)
     }
 }
 
-pathtrace :: (start_ray: Ray, scene: Scene) -> vec3
+pathtrace :: (start_ray: Ray, tlas_id: bvh_id, scene: Scene) -> vec3
 {
     radiance := vec3(0, 0, 0);
     weight := vec3(1, 1, 1);
@@ -70,7 +71,7 @@ pathtrace :: (start_ray: Ray, scene: Scene) -> vec3
     max_bounces := 5;
     for bounce := 0; bounce <= max_bounces; bounce = bounce + 1
     {
-        hit := ray_scene_intersection(ray, scene);
+        hit := ray_scene_intersection(ray, tlas_id, scene);
         if !hit.hit
         {
             // Simple gradient environment map.
@@ -126,7 +127,7 @@ Hit_Info :: struct
     normal: vec3,
 }
 
-ray_scene_intersection :: (ray: Ray, scene: Scene) -> Hit_Info
+ray_scene_intersection :: (ray: Ray, tlas_id: bvh_id, scene: Scene) -> Hit_Info
 {
     // @tmp: These constants will be implicit (They may even be an enum)
     Ray_Flags_Opaque: uint = 1;
@@ -145,7 +146,7 @@ ray_scene_intersection :: (ray: Ray, scene: Scene) -> Hit_Info
     desc.t_max = 1000000000.0;
     desc.origin = ray.ori;
     desc.dir = ray.dir;
-    rq := rayquery_init(desc, 0);
+    rq := rayquery_init(desc, tlas_id);
 
     rayquery_proceed(rq);
 

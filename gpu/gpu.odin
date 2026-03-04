@@ -595,34 +595,6 @@ texture_free_and_destroy :: proc(texture: ^Owned_Texture)
     texture^ = {}
 }
 
-set_texture_desc :: #force_inline proc(desc_heap: ptr, idx: u32, desc: Texture_Descriptor)
-{
-    desc_size := #force_inline texture_view_descriptor_size()
-    tmp := desc
-    runtime.mem_copy(auto_cast(uintptr(desc_heap.cpu) + uintptr(idx * desc_size)), &tmp, int(desc_size))
-}
-
-set_texture_rw_desc :: #force_inline proc(desc_heap: ptr, idx: u32, desc: Texture_Descriptor)
-{
-    desc_size := #force_inline texture_rw_view_descriptor_size()
-    tmp := desc
-    runtime.mem_copy(auto_cast(uintptr(desc_heap.cpu) + uintptr(idx * desc_size)), &tmp, int(desc_size))
-}
-
-set_sampler_desc :: #force_inline proc(desc_heap: ptr, idx: u32, desc: Sampler_Descriptor)
-{
-    desc_size := #force_inline sampler_descriptor_size()
-    tmp := desc
-    runtime.mem_copy(auto_cast(uintptr(desc_heap.cpu) + uintptr(idx * desc_size)), &tmp, int(desc_size))
-}
-
-set_bvh_desc :: #force_inline proc(desc_heap: ptr, idx: u32, desc: BVH_Descriptor)
-{
-    desc_size := #force_inline bvh_descriptor_size()
-    tmp := desc
-    runtime.mem_copy(auto_cast(uintptr(desc_heap.cpu) + uintptr(idx * desc_size)), &tmp, int(desc_size))
-}
-
 Owned_BVH :: struct
 {
     using handle: BVH,
@@ -893,6 +865,7 @@ desc_pool_resource_init :: proc(res_size: u32, res_count: i64) -> Descriptor_Poo
     res.addr = mem_alloc_raw(res_size, res_count_rounded, 16, alloc_type = .Descriptors)
     res.res_size = res_size
     res.res_count = u32(res_count_rounded)
+    intr.mem_zero(res.addr.cpu, res.res_size * res.res_count)
     mem.buddy_allocator_init(&res.allocator, slice.bytes_from_ptr(res.addr.cpu, int(res_size * u32(res_count_rounded))), uint(res_size))
     return res
 }

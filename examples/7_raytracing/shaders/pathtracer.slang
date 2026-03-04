@@ -21,6 +21,7 @@ struct Scene
 struct ComputeData
 {
     uint output_texture_id;
+    uint tlas_id;
     Scene scene;
     float2 resolution;
     uint accum_counter;
@@ -97,7 +98,7 @@ void computeMain(uint3 global_invocation_id : SV_DispatchThreadID, uniform Compu
     camera_ray.dir = world_camera_lookat;
 
     init_rng(uint(global_invocation_id.y * uint(data->resolution.x) + global_invocation_id.x), data->accum_counter);
-    float3 color = pathtrace(camera_ray, data->scene);
+    float3 color = pathtrace(camera_ray, data->tlas_id, data->scene);
 
     if (float(global_invocation_id.x) < data->resolution.x && float(global_invocation_id.y) < data->resolution.y)
     {
@@ -113,7 +114,7 @@ void computeMain(uint3 global_invocation_id : SV_DispatchThreadID, uniform Compu
     }
 }
 
-float3 pathtrace(Ray start_ray, Scene scene)
+float3 pathtrace(Ray start_ray, uint tlas_id, Scene scene)
 {
     float3 radiance = float3(0.0, 0.0, 0.0);
     float3 weight = float3(1.0, 1.0, 1.0);
@@ -123,7 +124,7 @@ float3 pathtrace(Ray start_ray, Scene scene)
     int max_bounces = 5;
     for (int bounce = 0; bounce <= max_bounces; bounce++)
     {
-        HitInfo hit = ray_scene_intersection(ray, scene);
+        HitInfo hit = ray_scene_intersection(ray, tlas_id, scene);
         if (!hit.hit)
         {
             float2 coords = float2(atan2(ray.dir.x, ray.dir.z) / (2.0 * pi), acos(clamp(ray.dir.y, -1.0, 1.0)) / pi);
@@ -156,7 +157,7 @@ float3 pathtrace(Ray start_ray, Scene scene)
     return radiance;
 }
 
-HitInfo ray_scene_intersection(Ray ray, Scene scene)
+HitInfo ray_scene_intersection(Ray ray, uint tlas_id, Scene scene)
 {
     static const uint Ray_Flags_Opaque = 1;
     static const uint Ray_Flags_Terminate_On_First_Hit = 4;
@@ -177,7 +178,7 @@ HitInfo ray_scene_intersection(Ray ray, Scene scene)
     ray_desc.TMax = 1000000000.0;
 
     RayQuery<RAY_FLAG_NONE> rq;
-    rq.TraceRayInline(getBVH(0), ray_flags, cull_mask, ray_desc);
+    rq.TraceRayInline(getBVH(tlas_id), ray_flags, cull_mask, ray_desc);
 
     rq.Proceed();
 
