@@ -764,63 +764,58 @@ desc_pool_destroy :: proc(pool: ^Descriptor_Pool, loc := #caller_location)
     desc_pool_resource_destroy(&pool.texture_rw_pool)
     desc_pool_resource_destroy(&pool.sampler_pool)
     desc_pool_resource_destroy(&pool.bvh_pool)
-
     pool^ = {}
 }
 
-desc_pool_alloc_texture :: proc(pool: ^Descriptor_Pool, desc: Texture_Descriptor) -> u32
-{
-    idx := desc_pool_resource_alloc(&pool.texture_pool, 1)
-    size := texture_view_descriptor_size()
-    desc_tmp := desc
-    intr.mem_copy(rawptr(uintptr(pool.texture_pool.addr.cpu) + uintptr(size * idx)), &desc_tmp, size)
-    return idx
+// Passing multiple descriptors to desc_pool_alloc_X is useful for contiguous descriptors.
+// One usecase for this is to group descriptors into contiguous sets. This enables grouping
+// based on update frequency and so on. In the shader you can store a single index and then
+// do something like:
+// texture_sample(material_base_id + 0, ...);
+// texture_sample(material_base_id + 1, ...);
+// texture_sample(material_base_id + 2, ...);
+
+desc_pool_alloc_texture :: proc { desc_pool_alloc_texture_single, desc_pool_alloc_texture_multi }
+desc_pool_alloc_texture_rw :: proc { desc_pool_alloc_texture_rw_single, desc_pool_alloc_texture_rw_multi }
+desc_pool_alloc_sampler :: proc { desc_pool_alloc_sampler_single, desc_pool_alloc_sampler_multi }
+desc_pool_alloc_bvh :: proc { desc_pool_alloc_bvh_single, desc_pool_alloc_bvh_multi }
+
+desc_pool_alloc_texture_single :: #force_inline proc(pool: ^Descriptor_Pool, desc: Texture_Descriptor) -> u32 {
+    return desc_pool_alloc_texture_multi(pool, { desc })
+}
+desc_pool_alloc_texture_rw_single :: #force_inline proc(pool: ^Descriptor_Pool, desc: Texture_Descriptor) -> u32 {
+    return desc_pool_alloc_texture_rw_multi(pool, { desc })
+}
+desc_pool_alloc_sampler_single :: #force_inline proc(pool: ^Descriptor_Pool, desc: Sampler_Descriptor) -> u32 {
+    return desc_pool_alloc_sampler_multi(pool, { desc })
+}
+desc_pool_alloc_bvh_single :: #force_inline proc(pool: ^Descriptor_Pool, desc: BVH_Descriptor) -> u32 {
+    return desc_pool_alloc_bvh_multi(pool, { desc })
 }
 
-desc_pool_alloc_texture_rw :: proc(pool: ^Descriptor_Pool, desc: Texture_Descriptor) -> u32
-{
-    idx := desc_pool_resource_alloc(&pool.texture_rw_pool, 1)
-    size := texture_rw_view_descriptor_size()
-    desc_tmp := desc
-    intr.mem_copy(rawptr(uintptr(pool.texture_rw_pool.addr.cpu) + uintptr(size * idx)), &desc_tmp, size)
-    return idx
+desc_pool_update_texture :: #force_inline proc(pool: ^Descriptor_Pool, idx: u32, desc: Texture_Descriptor) {
+    desc_pool_resource_update(&pool.texture_pool, idx, desc)
+}
+desc_pool_update_texture_rw :: #force_inline proc(pool: ^Descriptor_Pool, idx: u32, desc: Texture_Descriptor) {
+    desc_pool_resource_update(&pool.texture_rw_pool, idx, desc)
+}
+desc_pool_update_sampler :: #force_inline proc(pool: ^Descriptor_Pool, idx: u32, desc: Sampler_Descriptor) {
+    desc_pool_resource_update(&pool.sampler_pool, idx, desc)
+}
+desc_pool_update_bvh :: #force_inline proc(pool: ^Descriptor_Pool, idx: u32, desc: BVH_Descriptor) {
+    desc_pool_resource_update(&pool.bvh_pool, idx, desc)
 }
 
-desc_pool_alloc_sampler :: proc(pool: ^Descriptor_Pool, desc: Sampler_Descriptor) -> u32
-{
-    idx := desc_pool_resource_alloc(&pool.sampler_pool, 1)
-    size := sampler_descriptor_size()
-    desc_tmp := desc
-    intr.mem_copy(rawptr(uintptr(pool.sampler_pool.addr.cpu) + uintptr(size * idx)), &desc_tmp, size)
-    return idx
-}
-
-desc_pool_alloc_bvh :: proc(pool: ^Descriptor_Pool, desc: BVH_Descriptor) -> u32
-{
-    idx := desc_pool_resource_alloc(&pool.bvh_pool, 1)
-    size := bvh_descriptor_size()
-    desc_tmp := desc
-    intr.mem_copy(rawptr(uintptr(pool.bvh_pool.addr.cpu) + uintptr(size * idx)), &desc_tmp, size)
-    return idx
-}
-
-desc_pool_free_texture :: proc(pool: ^Descriptor_Pool, idx: u32)
-{
+desc_pool_free_texture :: #force_inline proc(pool: ^Descriptor_Pool, idx: u32) {
     desc_pool_resource_free(&pool.texture_pool, idx)
 }
-
-desc_pool_free_texture_rw :: proc(pool: ^Descriptor_Pool, idx: u32)
-{
+desc_pool_free_texture_rw :: #force_inline proc(pool: ^Descriptor_Pool, idx: u32) {
     desc_pool_resource_free(&pool.texture_rw_pool, idx)
 }
-
-desc_pool_free_sampler :: proc(pool: ^Descriptor_Pool, idx: u32)
-{
+desc_pool_free_sampler :: #force_inline proc(pool: ^Descriptor_Pool, idx: u32) {
     desc_pool_resource_free(&pool.sampler_pool, idx)
 }
-
-desc_pool_free_bvh :: proc(pool: ^Descriptor_Pool, idx: u32)
-{
+desc_pool_free_bvh :: #force_inline proc(pool: ^Descriptor_Pool, idx: u32) {
     desc_pool_resource_free(&pool.bvh_pool, idx)
 }
 
@@ -841,20 +836,12 @@ desc_pool_free_all :: proc(pool: ^Descriptor_Pool)
     desc_pool_resource_free_all(&pool.bvh_pool)
 }
 
-// The _multi category is useful for contiguous descriptors. One usecase for this is to
-// group descriptors into contiguous sets. This enables grouping based on update frequency and so on.
-// In the shader you can store a single index and then do something like:
-// texture_sample(material_base_id + 0, ...);
-// texture_sample(material_base_id + 1, ...);
-// texture_sample(material_base_id + 2, ...);
-
 desc_pool_alloc_texture_multi :: proc(pool: ^Descriptor_Pool, textures: []Texture_Descriptor) -> u32
 {
     assert(len(textures) <= int(max(u8)))
     idx := desc_pool_resource_alloc(&pool.texture_pool, i64(len(textures)))
-    for &texture in textures {
-        size := texture_view_descriptor_size()
-        intr.mem_copy(rawptr(uintptr(pool.texture_pool.addr.cpu) + uintptr(size * idx)), &texture, size)
+    for texture in textures {
+        desc_pool_resource_update(&pool.texture_pool, idx, texture)
     }
     return idx
 }
@@ -863,9 +850,8 @@ desc_pool_alloc_texture_rw_multi :: proc(pool: ^Descriptor_Pool, textures_rw: []
 {
     assert(len(textures_rw) <= int(max(u8)))
     idx := desc_pool_resource_alloc(&pool.texture_rw_pool, i64(len(textures_rw)))
-    size := texture_rw_view_descriptor_size()
-    for &texture_rw in textures_rw {
-        intr.mem_copy(rawptr(uintptr(pool.texture_rw_pool.addr.cpu) + uintptr(size * idx)), &texture_rw, size)
+    for texture_rw in textures_rw {
+        desc_pool_resource_update(&pool.texture_rw_pool, idx, texture_rw)
     }
     return idx
 }
@@ -874,9 +860,8 @@ desc_pool_alloc_sampler_multi :: proc(pool: ^Descriptor_Pool, samplers: []Sample
 {
     assert(len(samplers) <= int(max(u8)))
     idx := desc_pool_resource_alloc(&pool.sampler_pool, i64(len(samplers)))
-    for &sampler in samplers {
-        size := sampler_descriptor_size()
-        intr.mem_copy(rawptr(uintptr(pool.sampler_pool.addr.cpu) + uintptr(size * idx)), &sampler, size)
+    for sampler in samplers {
+        desc_pool_resource_update(&pool.sampler_pool, idx, sampler)
     }
     return idx
 }
@@ -885,15 +870,13 @@ desc_pool_alloc_bvh_multi :: proc(pool: ^Descriptor_Pool, bvhs: []BVH_Descriptor
 {
     assert(len(bvhs) <= int(max(u8)))
     idx := desc_pool_resource_alloc(&pool.bvh_pool, i64(len(bvhs)))
-    for &bvh in bvhs {
-        size := bvh_descriptor_size()
-        intr.mem_copy(rawptr(uintptr(pool.bvh_pool.addr.cpu) + uintptr(size * idx)), &bvh, size)
+    for bvh in bvhs {
+        desc_pool_resource_update(&pool.bvh_pool, idx, bvh)
     }
     return idx
 }
 
-cmd_set_desc_pool :: #force_inline proc(cmd_buf: Command_Buffer, pool: Descriptor_Pool, loc := #caller_location)
-{
+cmd_set_desc_pool :: #force_inline proc(cmd_buf: Command_Buffer, pool: Descriptor_Pool, loc := #caller_location) {
     cmd_set_desc_heap(cmd_buf, pool.texture_pool.addr, pool.texture_rw_pool.addr, pool.sampler_pool.addr, pool.bvh_pool.addr, loc = loc)
 }
 
@@ -928,6 +911,14 @@ desc_pool_resource_alloc :: proc(pool: ^Descriptor_Pool_Resource, count: i64) ->
 
     alloced_idx := u32((uintptr(alloced_addr) - uintptr(pool.addr.cpu)) / uintptr(pool.res_size))
     return alloced_idx
+}
+
+@(private="file")
+desc_pool_resource_update :: #force_inline proc(pool: ^Descriptor_Pool_Resource, idx: u32, desc: $T)
+{
+    assert(size_of(desc) >= pool.res_size)
+    desc_tmp := desc
+    intr.mem_copy(rawptr(uintptr(pool.addr.cpu) + uintptr(pool.res_size * idx)), &desc_tmp, pool.res_size)
 }
 
 @(private="file")
