@@ -65,7 +65,7 @@ codegen :: proc(ast: Ast, shader_type: Shader_Type, input_path: string, output_p
                     }
                 }
                 writeln("};")
-                writeln("")
+                writefln("%v %v_ZERO;", decl.name, decl.name)
             }
         }
     }
@@ -128,6 +128,7 @@ codegen :: proc(ast: Ast, shader_type: Shader_Type, input_path: string, output_p
         }
     }
 
+
     writefln("layout(buffer_reference, scalar) readonly buffer _res_ptr_void {{ uint _res_void_; }};")
     for &type in ast.used_types
     {
@@ -136,6 +137,10 @@ codegen :: proc(ast: Ast, shader_type: Shader_Type, input_path: string, output_p
         }
         if type.kind == .Slice {
             writefln("layout(buffer_reference, scalar) readonly buffer %v {{ %v _res_[]; }};", type_to_glsl(&type), type_to_glsl(type.base))
+        }
+        // Prepare zero initialization for each used types
+        if type.kind != .Primitive && type.kind != .Label {
+            writefln("%v %v_ZERO;", type_to_glsl(&type), type_to_glsl_unique(&type))
         }
     }
 
@@ -219,7 +224,12 @@ codegen :: proc(ast: Ast, shader_type: Shader_Type, input_path: string, output_p
 
                 if var_decl.attr == nil
                 {
-                    writefln("%v %v;", type_to_glsl(var_decl.type), var_decl.glsl_name)
+                    // It's not allowed to set rayquery objects like this, so we'll leave those uninitialized.
+                    if var_decl.type.primitive_kind == .Ray_Query {
+                        writefln("%v %v;", type_to_glsl(var_decl.type), var_decl.glsl_name)
+                    } else {
+                        writefln("%v %v = %v_ZERO;", type_to_glsl(var_decl.type), var_decl.glsl_name, type_to_glsl_unique(var_decl.type))
+                    }
                 }
                 else
                 {
@@ -648,6 +658,47 @@ type_to_glsl :: proc(type: ^Ast_Type) -> string
     return ""
 }
 
+// Used to get a glsl valid identifier for a type. (e.g. zero initialization)
+type_to_glsl_unique :: proc(type: ^Ast_Type) -> string
+{
+    if type == nil do return "void"
+
+    switch type.kind
+    {
+        case .Poison: return "<POISON>"
+        case .None: return "void"
+        case .Unknown: return "<UNKNOWN>"
+        case .Label: return type.name.text
+        case .Pointer: return strings.concatenate({ "_res_ptr_", type_to_glsl(type.base) })
+        case .Slice: return strings.concatenate({ "_res_slice_", type_to_glsl(type.base) })
+        case .Proc: panic("Translating proc type is not implemented.")
+        case .Struct: panic("Translating struct type is not implemented.")
+        case .Primitive:
+        {
+            switch type.primitive_kind
+            {
+                case .None: return "NONE"
+                case .Untyped_Int: panic("Untyped int is not supposed to reach this stage.")
+                case .Untyped_Float: panic("Untyped float is not supposed to reach this stage.")
+                case .String: panic("String is not supposed to reach this stage.")
+                case .Bool: return "bool"
+                case .Float: return "float"
+                case .Uint: return "uint"
+                case .Int: return "int"
+                case .Vec2: return "vec2"
+                case .Vec3: return "vec3"
+                case .Vec4: return "vec4"
+                case .Texture_ID: return "texture_id"
+                case .Sampler_ID: return "sampler_id"
+                case .Mat4: return "mat4"
+                case .Ray_Query: return "rayQueryEXT"
+                case .BVH_ID: return "bvh_id"
+            }
+        }
+    }
+    return ""
+}
+
 binary_op_to_glsl :: proc(op: Ast_Binary_Op) -> string
 {
     switch op
@@ -815,6 +866,18 @@ write_preamble :: proc()
         writeln(RT_Intrinsics_Code)
     }
 
+    // Zero initializations for primitive types
+    writeln("bool bool_ZERO;")
+    writeln("int int_ZERO;")
+    writeln("uint uint_ZERO;")
+    writeln("float float_ZERO;")
+    writeln("vec2 vec2_ZERO;")
+    writeln("vec3 vec3_ZERO;")
+    writeln("vec4 vec4_ZERO;")
+    writeln("mat4 mat4_ZERO;")
+    writeln("uint textureid_ZERO;")
+    writeln("uint samplerid_ZERO;")
+    writeln("uint bvh_id_ZERO;")
     writeln("")
 }
 
@@ -891,6 +954,7 @@ struct Ray_Desc
     vec3 origin;
     vec3 dir;
 };
+Ray_Desc Ray_Desc_ZERO;
 
 struct Ray_Result
 {
@@ -903,6 +967,7 @@ struct Ray_Result
     mat4 object_to_world;
     mat4 world_to_object;
 };
+Ray_Result Ray_Result_ZERO;
 
 Ray_Result rayquery_result(rayQueryEXT rq)
 {
