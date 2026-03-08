@@ -49,7 +49,7 @@ main :: proc()
         os.exit(1)
     }
 
-    tokens := lex_file(file_content, allocator = perm_arena)
+    tokens := lex_file(path, file_content, allocator = perm_arena)
     ast, ok_p := parse_file(path, tokens, allocator = perm_arena)
     if !ok_p do os.exit(1)
     ok_t := typecheck_ast(&ast, path, allocator = perm_arena)

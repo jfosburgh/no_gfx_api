@@ -546,6 +546,23 @@ codegen_expr :: proc(expression: ^Ast_Expr)
 
                     is_intrinsic = true
                 }
+                else if text == "printf"
+                {
+                    assert(len(expr.args) >= 1)
+
+                    writef("debugPrintfEXT(\"%v\", ", printf_fmt_string_to_glsl(expr))
+                    for arg, i in expr.args
+                    {
+                        if i == 0 do continue
+
+                        codegen_expr(arg)
+                        if i < len(expr.args) - 1 do write(", ")
+                    }
+
+                    write(")")
+
+                    is_intrinsic = true
+                }
             }
 
             if is_intrinsic do break
@@ -589,6 +606,7 @@ type_to_glsl :: proc(type: ^Ast_Type) -> string
                 case .None: return "NONE"
                 case .Untyped_Int: panic("Untyped int is not supposed to reach this stage.")
                 case .Untyped_Float: panic("Untyped float is not supposed to reach this stage.")
+                case .String: panic("String is not supposed to reach this stage.")
                 case .Bool: return "bool"
                 case .Float: return "float"
                 case .Uint: return "uint"
@@ -674,6 +692,35 @@ attribute_to_glsl :: proc(attribute: Ast_Attribute, ast: Ast, shader_type: Shade
     return {}
 }
 
+printf_fmt_string_to_glsl :: proc(call: ^Ast_Call) -> string
+{
+    scratch, _ := acquire_scratch()
+    sb := strings.builder_make_none(allocator = scratch)
+
+    vararg_idx := 0
+    for c in call.args[0].token.text
+    {
+        if c == '%'
+        {
+            arg_type := call.args[vararg_idx+1].type.primitive_kind
+            if arg_type == .Int {
+                strings.write_string(&sb, "%d")
+            } else if arg_type == .Uint {
+                strings.write_string(&sb, "%u")
+            } else if arg_type == .Float {
+                strings.write_string(&sb, "%f")
+            } else {
+                panic("Type not supported for printf")
+            }
+
+            vararg_idx += 1
+        }
+        else do strings.write_rune(&sb, c)
+    }
+
+    return strings.clone(strings.to_string(sb))
+}
+
 codegen_scope_decls :: proc(scope: ^Ast_Scope)
 {
     for decl in scope.decls {
@@ -721,6 +768,7 @@ write_preamble :: proc()
     writeln("#extension GL_EXT_nonuniform_qualifier : require")
     writeln("#extension GL_EXT_scalar_block_layout : require")
     writeln("#extension GL_EXT_shader_image_load_formatted : require")
+    writeln("#extension GL_EXT_debug_printf : require")
     if .Raytracing in writer.ast.used_features {
         writeln("#extension GL_EXT_ray_query : require")
     }

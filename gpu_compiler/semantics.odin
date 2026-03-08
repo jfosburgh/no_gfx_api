@@ -268,6 +268,8 @@ typecheck_expr :: proc(using c: ^Checker, expression: ^Ast_Expr)
                 expr.type = &UNTYPED_INT_TYPE
             } else if expr.token.type == .FloatLit {
                 expr.type = &UNTYPED_FLOAT_TYPE
+            } else if expr.token.type == .StrLit {
+                expr.type = &STRING_TYPE
             } else if expr.token.type == .True {
                 expr.type = &BOOL_TYPE
             } else if expr.token.type == .False {
@@ -357,11 +359,14 @@ typecheck_expr :: proc(using c: ^Checker, expression: ^Ast_Expr)
                 {
                     if intr.name == target.token.text && intr.type.kind == .Proc
                     {
-                        if len(intr.type.args) == len(expr.args)
+                        arg_count_matches := len(intr.type.args) == len(expr.args)
+                        arg_count_matches |= intr.type.is_variadic && len(expr.args) >= len(intr.type.args)
+                        if arg_count_matches
                         {
                             match := true
-                            for arg, i in expr.args
+                            for i in 0..<len(intr.type.args)
                             {
+                                arg := expr.args[i]
                                 if !type_implicit_convert(arg.type, intr.type.args[i].type)
                                 {
                                     match = false
@@ -380,6 +385,13 @@ typecheck_expr :: proc(using c: ^Checker, expression: ^Ast_Expr)
                                    target.token.text == "rayquery_accept" ||
                                    target.token.text == "rayquery_result" {
                                     ast.used_features += { .Raytracing }
+                                }
+
+                                if target.token.text == "printf"
+                                {
+                                    if !check_printf(c, expr) {
+                                        return
+                                    }
                                 }
 
                                 expr.glsl_name = intr.glsl_name
@@ -432,6 +444,7 @@ TEXTUREID_TYPE := Ast_Type { kind = .Primitive, primitive_kind = .Texture_ID, na
 SAMPLERID_TYPE := Ast_Type { kind = .Primitive, primitive_kind = .Sampler_ID, name = { text = "samplerid", line = {}, type = {}, col_start = {} } }
 BVH_ID_TYPE := Ast_Type { kind = .Primitive, primitive_kind = .BVH_ID, name = { text = "bvh_id", line = {}, type = {}, col_start = {} } }
 MAT4_TYPE := Ast_Type { kind = .Primitive, primitive_kind = .Mat4, name = { text = "mat4", line = 0, type = {}, col_start = {} } }
+STRING_TYPE := Ast_Type { kind = .Primitive, primitive_kind = .String, name = { text = "string", line = 0, type = {}, col_start = {} } }
 RAYQUERY_TYPE := Ast_Type { kind = .Primitive, primitive_kind = .Ray_Query, name = { text = "Ray_Query", line = {}, type = {}, col_start = {} } }
 
 same_type :: proc(type1: ^Ast_Type, type2: ^Ast_Type) -> bool
@@ -657,9 +670,12 @@ add_intrinsics :: proc()
 
     // Matrix manipulation
     add_intrinsic("transpose", { &MAT4_TYPE }, { "m" }, &MAT4_TYPE)
+
+    // Misc
+    add_intrinsic("printf", { &STRING_TYPE }, { "fmt" }, is_variadic = true)
 }
 
-add_intrinsic :: proc(name: string, args: []^Ast_Type, names: []string, ret: ^Ast_Type = nil, glsl_name := "")
+add_intrinsic :: proc(name: string, args: []^Ast_Type, names: []string, ret: ^Ast_Type = nil, glsl_name := "", is_variadic := false)
 {
     assert(len(args) == len(names))
 
@@ -677,6 +693,7 @@ add_intrinsic :: proc(name: string, args: []^Ast_Type, names: []string, ret: ^As
     decl.type.kind = .Proc
     decl.type.args = arg_decls
     decl.type.ret = ret
+    decl.type.is_variadic = is_variadic
     decl.glsl_name = glsl_name
     append(&INTRINSICS, decl)
 }
@@ -830,4 +847,51 @@ resolve_scope_decls :: proc(using c: ^Checker)
             }
         }
     }
+}
+
+check_printf :: proc(using c: ^Checker, call: ^Ast_Call) -> bool
+{
+    args := call.args
+    fmt_str: string
+    #partial switch arg in args[0].derived_expr
+    {
+        case ^Ast_Lit_Expr:
+        {
+            if args[0].type.primitive_kind != .String
+            {
+                typecheck_error(c, call.token, "First argument of printf must be a constant string.")
+                return false
+            }
+
+            fmt_str = args[0].token.text
+        }
+        case:
+        {
+            typecheck_error(c, call.token, "First argument of printf must be a constant string.")
+            return false
+        }
+    }
+
+    fmt_arg_count := 0
+    for c in fmt_str
+    {
+        // Add escape for '%'.
+        if c == '%' {
+            fmt_arg_count += 1
+        }
+    }
+
+    if fmt_arg_count + 1 != len(call.args)
+    {
+        if fmt_arg_count == 1 {
+            typecheck_error(c, call.token, "printf format string specifies %v argument, supplied %v.", fmt_arg_count, len(call.args) - 1)
+        } else {
+            typecheck_error(c, call.token, "printf format string specifies %v arguments, supplied %v.", fmt_arg_count, len(call.args) - 1)
+        }
+        return false
+    }
+
+    // TODO: Check for unallowed types in varargs.
+
+    return true
 }

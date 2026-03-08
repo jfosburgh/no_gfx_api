@@ -298,6 +298,7 @@ Ast_Type_Primitive_Kind :: enum
     Vec3,
     Vec4,
     Mat4,
+    String,
 
     Ray_Query,
     BVH_ID,
@@ -315,6 +316,7 @@ Ast_Type :: struct
     args: []^Ast_Decl,
     ret: ^Ast_Type,
     ret_attr: Maybe(Ast_Attribute),
+    is_variadic: bool,
 
     // Struct
     members: []^Ast_Decl,
@@ -802,7 +804,7 @@ parse_primary_expr :: proc(using p: ^Parser) -> ^Ast_Expr
         expr = make_expr(p, Ast_Ident_Expr)
         at += 1
     }
-    else if tokens[at].type == .IntLit || tokens[at].type == .FloatLit
+    else if tokens[at].type == .IntLit || tokens[at].type == .FloatLit || tokens[at].type == .StrLit
     {
         expr = make_expr(p, Ast_Lit_Expr)
         at += 1

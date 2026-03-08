@@ -71,6 +71,7 @@ Token_Type :: enum
     // Literals
     IntLit,
     FloatLit,
+    StrLit,  // For printf.
     True,
     False,
 
@@ -139,11 +140,12 @@ Token :: struct #all_or_none
     col_start: u32,
 }
 
-lex_file :: proc(file_content: []u8, allocator: runtime.Allocator) -> []Token
+lex_file :: proc(filename: string, file_content: []u8, allocator: runtime.Allocator) -> []Token
 {
     tokens := make([dynamic]Token, allocator = allocator)
 
     lexer := Lexer {
+        filename = filename,
         buf = file_content
     }
     for true
@@ -158,6 +160,7 @@ lex_file :: proc(file_content: []u8, allocator: runtime.Allocator) -> []Token
 
 Lexer :: struct
 {
+    filename: string,
     buf: []u8,
     offset: u32,
     line: u32,
@@ -225,6 +228,33 @@ next_token :: proc(using lexer: ^Lexer) -> Token
             _, ok := strconv.parse_f32(num_str)
             if !ok do token.type = .Unknown
         }
+    }
+    else if buf[offset] == '"'
+    {
+        offset += 1
+        begin_offset := offset
+        for true
+        {
+            if offset >= u32(len(buf)) do break
+
+            if is_newline(buf[offset])
+            {
+                offset += 1
+                line_start = offset
+                line += 1
+            }
+            else if buf[offset] != '"'
+            {
+                offset += 1
+            }
+            else do break
+        }
+
+        token.type = .StrLit
+        token.text = string(buf[begin_offset:offset])
+        if offset >= u32(len(buf)) do error_msg(filename, token, "String literal does not have an end.")
+
+        offset += 1
     }
     else  // Operators, parentheses, etc.
     {
@@ -404,6 +434,7 @@ token_type_to_string :: proc(type: Token_Type) -> string
         case .Return:       return "return"
         case .IntLit:       return "integer literal"
         case .FloatLit:     return "floating point literal"
+        case .StrLit:       return "string literal"
         case .True:         return "true"
         case .False:        return "false"
         case .EOS:          return "end of file"
