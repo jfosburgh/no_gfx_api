@@ -238,11 +238,7 @@ random_vec2 :: () -> vec2
 
 copysignf :: (mag: float, sgn: float) -> float
 {
-    if sgn < 0 {
-        return -mag;
-    } else {
-        return mag;
-    }
+    return mag if sgn > 0 else -mag;
 }
 
 basis_fromz :: (v: vec3) -> mat4
@@ -269,23 +265,14 @@ sample_hemisphere_cos :: (normal: vec3, ruv: vec2) -> vec3
 sample_hemisphere_cos_pdf :: (normal: vec3, direction: vec3) -> float
 {
     cosw := dot(normal, direction);
-    if cosw <= 0 {
-        return 0;
-    } else {
-        return cosw / pi;
-    }
+    return 0 if cosw <= 0 else cosw/pi;
 }
 
 // BSDF sampling
 
 sample_matte :: (color: vec3, normal: vec3, outgoing: vec3, rn: vec2) -> vec3
 {
-    up_normal: vec3;
-    if dot(normal, outgoing) > 0 {
-        up_normal = normal;
-    } else {
-        up_normal = -normal;
-    }
+    up_normal := normal if dot(normal, outgoing) > 0 else -normal;
     return sample_hemisphere_cos(up_normal, rn);
 }
 
@@ -298,12 +285,7 @@ eval_matte :: (color: vec3, normal: vec3, outgoing: vec3, incoming: vec3) -> vec
 sample_matte_pdf :: (color: vec3, normal: vec3, outgoing: vec3, incoming: vec3) -> float
 {
     if dot(normal, incoming) * dot(normal, outgoing) <= 0 { return 0; }
-    up_normal: vec3;
-    if dot(normal, outgoing) > 0 {
-        up_normal = normal;
-    } else {
-        up_normal = -normal;
-    }
+    up_normal := normal if dot(normal, outgoing) > 0 else -normal;
     return sample_hemisphere_cos_pdf(up_normal, incoming);
 }
 

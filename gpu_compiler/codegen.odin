@@ -493,6 +493,16 @@ codegen_expr :: proc(expression: ^Ast_Expr)
         {
             write(expr.token.text)
         }
+        case ^Ast_If_Expr:
+        {
+            write("(")
+            codegen_expr(expr.cond_expr)
+            write(") ? (")
+            codegen_expr(expr.then_expr)
+            write(") : (")
+            codegen_expr(expr.else_expr)
+            write(")")
+        }
         case ^Ast_Member_Access:
         {
             codegen_expr(expr.target)

@@ -75,6 +75,7 @@ Any_Expr :: union
     ^Ast_Ident_Expr,
     ^Ast_Lit_Expr,
     ^Ast_Call,
+    ^Ast_If_Expr,
 }
 
 Ast_Expr :: struct
@@ -190,6 +191,14 @@ Ast_Ident_Expr :: struct
 Ast_Lit_Expr :: struct
 {
     using base_expr: Ast_Expr
+}
+
+Ast_If_Expr :: struct
+{
+    using base_expr: Ast_Expr,
+    cond_expr: ^Ast_Expr,
+    then_expr: ^Ast_Expr,
+    else_expr: ^Ast_Expr,
 }
 
 // Statements
@@ -774,6 +783,17 @@ parse_expr :: proc(using p: ^Parser, prec: int = max(int)) -> ^Ast_Expr
     // Binary operators
     for true
     {
+        if tokens[at].type == .If
+        {
+            if_expr := make_expr(p, Ast_If_Expr)
+            at += 1
+            if_expr.then_expr = lhs
+            if_expr.cond_expr = parse_expr(p)
+            required_token(p, .Else)
+            if_expr.else_expr = parse_expr(p)
+            return if_expr
+        }
+
         op, found := Op_Precedence[tokens[at].type]
         undo_recurse := false
         undo_recurse |= !found

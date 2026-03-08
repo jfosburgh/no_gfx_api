@@ -281,6 +281,22 @@ typecheck_expr :: proc(using c: ^Checker, expression: ^Ast_Expr)
                 expr.type = &BOOL_TYPE
             }
         }
+        case ^Ast_If_Expr:
+        {
+            scratch, _ := acquire_scratch()
+
+            typecheck_expr(c, expr.cond_expr)
+            if !type_implicit_convert(expr.cond_expr.type, &BOOL_TYPE) {
+                typecheck_error_mismatching_types(c, expr.token, expr.cond_expr.type, &BOOL_TYPE)
+            }
+
+            typecheck_expr(c, expr.then_expr)
+            typecheck_expr(c, expr.else_expr)
+            expr.type = if_expr_result_type(expr.then_expr.type, expr.else_expr.type)
+            if expr.type == &POISON_TYPE {
+                typecheck_error(c, expr.token, "Types for then and else expressions are incompatible: '%v' and '%v'.", type_to_string(expr.then_expr.type, arena = scratch), type_to_string(expr.else_expr.type, arena = scratch))
+            }
+        }
         case ^Ast_Member_Access:
         {
             typecheck_expr(c, expr.target)
@@ -811,6 +827,36 @@ unary_op_result_type :: proc(op: Ast_Unary_Op, type: ^Ast_Type) -> ^Ast_Type
         if type_implicit_convert(type, &VEC4_TYPE) do return &VEC4_TYPE
     }
 
+    return &POISON_TYPE
+}
+
+// Returns &POISON_TYPE if the two types are not allowed
+if_expr_result_type :: proc(then_type: ^Ast_Type, else_type: ^Ast_Type) -> ^Ast_Type
+{
+    // Commutative properties here.
+    for i in 0..<2
+    {
+        t1 := then_type if i == 0 else else_type
+        t2 := else_type if i == 0 else then_type
+
+        if (t1.primitive_kind == .Untyped_Float || t1.primitive_kind == .Untyped_Int) && t2.primitive_kind == .Float {
+            return t2
+        }
+        if t1.primitive_kind == .Untyped_Int && (t2.primitive_kind == .Uint || t2.primitive_kind == .Int) {
+            return t2
+        }
+        if type_implicit_convert(t1, &FLOAT_TYPE) && t2.primitive_kind == .Vec2 {
+            return t2
+        }
+        if type_implicit_convert(t1, &FLOAT_TYPE) && t2.primitive_kind == .Vec3 {
+            return t2
+        }
+        if type_implicit_convert(t1, &FLOAT_TYPE) && t2.primitive_kind == .Vec4 {
+            return t2
+        }
+    }
+
+    if same_type(then_type, else_type) do return then_type
     return &POISON_TYPE
 }
 
