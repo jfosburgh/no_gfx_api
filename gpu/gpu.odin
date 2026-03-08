@@ -1,4 +1,6 @@
 
+#+vet !unused-imports
+
 package gpu
 
 import "base:runtime"
@@ -706,9 +708,11 @@ Descriptor_Pool_Resource :: struct
 {
     addr: ptr,
     res_size: u32,
-    res_count: u32,
+    res_count: u32,  // Current number of allocated descriptors in addr.
+    res_capacity: u32,
     lock: sync.Atomic_Mutex,
-    allocator: mem.Buddy_Allocator,
+    freelists: [dynamic]Descriptor_Pool_Freelist,  // One freelist per allocation size.
+    alloc_size: [dynamic]u8,  // byte i contains the number of descriptors for allocation of index i.
 }
 
 // Simple allocator of descriptor indices. Thread-safe.
@@ -857,16 +861,13 @@ desc_pool_resource_init :: proc(res_size: u32, res_count: i64) -> Descriptor_Poo
 {
     assert(res_count > 0)
     assert(res_size > 0)
-    assert(math.is_power_of_two(auto_cast res_size))
-
-    res_count_rounded := math.next_power_of_two(auto_cast res_count)
 
     res: Descriptor_Pool_Resource
-    res.addr = mem_alloc_raw(res_size, res_count_rounded, 16, alloc_type = .Descriptors)
+    res.addr = mem_alloc_raw(res_size, res_count, 16, alloc_type = .Descriptors)
     res.res_size = res_size
-    res.res_count = u32(res_count_rounded)
+    res.res_count = 0
+    res.res_capacity = u32(res_count)
     intr.mem_zero(res.addr.cpu, res.res_size * res.res_count)
-    mem.buddy_allocator_init(&res.allocator, slice.bytes_from_ptr(res.addr.cpu, int(res_size * u32(res_count_rounded))), uint(res_size))
     return res
 }
 
@@ -877,13 +878,32 @@ desc_pool_resource_alloc :: proc(pool: ^Descriptor_Pool_Resource, count: i64) ->
     assert(count <= i64(max(u8)))
     sync.guard(&pool.lock)
 
-    alloced_addr, err := mem.buddy_allocator_alloc_non_zeroed(&pool.allocator, uint(pool.res_size) * uint(count))
-    ensure(err == nil)
+    found: ^Descriptor_Pool_Freelist
+    for &freelist in pool.freelists
+    {
+        if len(freelist.free) <= 0 do continue
 
-    ensure(uintptr(alloced_addr) % uintptr(pool.res_size) == 0)
+        if i64(freelist.el_count) == count {
+            found = &freelist
+            break
+        }
+    }
 
-    alloced_idx := u32((uintptr(alloced_addr) - uintptr(pool.addr.cpu)) / uintptr(pool.res_size))
-    return alloced_idx
+    if found != nil
+    {
+        free_slot := pop(&found.free)
+        pool.alloc_size[free_slot] = u8(count)
+        return free_slot
+    }
+    else
+    {
+        assert(pool.res_count + u32(count) < pool.res_capacity)
+        free_slot := pool.res_count
+        pool.res_count += u32(count)
+        resize(&pool.alloc_size, pool.res_count)
+        pool.alloc_size[free_slot] = u8(count)
+        return free_slot
+    }
 }
 
 @(private="file")
@@ -899,8 +919,30 @@ desc_pool_resource_free :: proc(pool: ^Descriptor_Pool_Resource, idx: u32)
 {
     sync.guard(&pool.lock)
 
-    alloc_addr := uintptr(pool.addr.cpu) + uintptr(idx) * uintptr(pool.res_size)
-    mem.buddy_allocator_free(&pool.allocator, rawptr(alloc_addr))
+    count := pool.alloc_size[idx]
+
+    found: ^Descriptor_Pool_Freelist
+    for &freelist in pool.freelists
+    {
+        if len(freelist.free) <= 0 do continue
+
+        if freelist.el_count == count {
+            found = &freelist
+            break
+        }
+    }
+
+    if found == nil
+    {
+        append(&pool.freelists, Descriptor_Pool_Freelist {
+            el_count = count,
+            free = {},
+        })
+
+        found = &pool.freelists[len(pool.freelists)-1]
+    }
+
+    append(&found.free, idx)
 }
 
 @(private="file")
@@ -912,7 +954,9 @@ desc_pool_resource_mem_zero :: #force_inline proc(pool: ^Descriptor_Pool_Resourc
 @(private="file")
 desc_pool_resource_free_all :: proc(pool: ^Descriptor_Pool_Resource)
 {
-    mem.buddy_allocator_free_all(&pool.allocator)
+    for &freelist in pool.freelists do delete(freelist.free)
+    delete(pool.freelists)
+    pool.res_count = 0
 }
 
 @(private="file")
