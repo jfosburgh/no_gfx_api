@@ -886,6 +886,7 @@ desc_pool_resource_alloc :: proc(pool: ^Descriptor_Pool_Resource($T), count: i64
 {
     assert(count > 0)
     assert(count <= i64(max(u8)))
+    assert(count <= 16, "Descriptor_Pool is built for small allocation sizes.")
     sync.guard(&pool.lock)
 
     found: ^Descriptor_Pool_Freelist
