@@ -46,9 +46,9 @@ Loader_Chunk_Size :: 16
 Compress_Textures :: false
 
 // G-buffer texture indices in texture heap
-GBUFFER_ALBEDO_IDX :: 1000
-GBUFFER_NORMAL_IDX :: 1001
-GBUFFER_METALLIC_ROUGHNESS_IDX :: 1002
+GBUFFER_ALBEDO_IDX: u32
+GBUFFER_NORMAL_IDX: u32
+GBUFFER_METALLIC_ROUGHNESS_IDX: u32
 
 // G-buffer texture type for toggling display
 GBuffer_Texture_Type :: enum u32 {
@@ -66,7 +66,6 @@ mutex: sync.Mutex
 loaded_textures: [dynamic]gpu.Owned_Texture
 // Enables asynchronous cancellation of texture loading
 cancel_loading_textures: bool
-next_texture_idx: u32 = shared.MISSING_TEXTURE_ID + 1
 // Cache for image_index -> texture mapping, reused across texture loading chunks
 image_to_texture: map[int]struct {
 	texture:     gpu.Owned_Texture,
@@ -141,26 +140,14 @@ main :: proc() {
 		gpu.mem_free(full_screen_quad_indices)
 	}
 
-	// Set up texture heap
-	texture_heap := gpu.mem_alloc_raw(
-		gpu.texture_view_descriptor_size(),
-		2048,
-		64,
-		alloc_type = .Descriptors,
-	)
-	defer gpu.mem_free_raw(texture_heap)
-	sampler_heap := gpu.mem_alloc_raw(gpu.texture_view_descriptor_size(), 10, 64, alloc_type = .Descriptors)
-	defer gpu.mem_free_raw(sampler_heap)
+	desc_pool := gpu.desc_pool_create()
+	defer gpu.desc_pool_destroy(&desc_pool)
 
-	// Set up read-write texture heap for G-buffer textures
-	texture_rw_heap_size := gpu.texture_rw_view_descriptor_size()
-	texture_rw_heap := gpu.mem_alloc_raw(texture_rw_heap_size, 2048, 64, alloc_type = .Descriptors)
-	defer gpu.mem_free_raw(texture_rw_heap)
-
-	magenta_texture := create_magenta_texture(&upload_arena, upload_cmd_buf, texture_heap)
+	magenta_texture := create_magenta_texture(&upload_arena, upload_cmd_buf)
 	defer gpu.texture_free_and_destroy(&magenta_texture)
+	magenta_texture_id := gpu.desc_pool_alloc_texture(&desc_pool, gpu.texture_view_descriptor(magenta_texture, {}))
 
-	scene, texture_infos, gltf_data := shared.load_scene_gltf(Sponza_Scene)
+	scene, texture_infos, gltf_data := shared.load_scene_gltf(Sponza_Scene, magenta_texture_id)
 	defer {
 		shared.destroy_scene(&scene)
 		gltf2.unload(gltf_data)
@@ -198,7 +185,7 @@ main :: proc() {
 			texture_infos: []shared.Gltf_Texture_Info,
 			gltf_data:     ^gltf2.Data,
 			scene:         ^shared.Scene,
-			texture_heap:  gpu.ptr,
+			desc_pool:     ^gpu.Descriptor_Pool,
 			logger:        log.Logger,
 			current_chunk: ^int,
 		}
@@ -206,7 +193,7 @@ main :: proc() {
 			texture_infos = texture_infos,
 			gltf_data     = gltf_data,
 			scene         = &scene,
-			texture_heap  = texture_heap,
+			desc_pool     = &desc_pool,
 			logger        = console_logger,
 			current_chunk = new(int),
 		}
@@ -229,7 +216,7 @@ main :: proc() {
 					data.texture_infos[current_chunk_start:current_chunk_end],
 					data.gltf_data,
 					data.scene,
-					data.texture_heap,
+					data.desc_pool,
 				)
 			}
 		}
@@ -244,23 +231,20 @@ main :: proc() {
 		for i := 0; i < len(texture_infos); i += Loader_Chunk_Size {
 			end := min(i + Loader_Chunk_Size, len(texture_infos))
 			chunk := texture_infos[i:end]
-			load_scene_textures_from_gltf(chunk, gltf_data, &scene, texture_heap)
+			load_scene_textures_from_gltf(chunk, gltf_data, &scene, &desc_pool)
 		}
 	}
 
-	gpu.set_sampler_desc(
-		sampler_heap,
-		0,
-		gpu.sampler_descriptor({ max_anisotropy = min(16.0, gpu.device_limits().max_anisotropy) }),
+	sampler_id := gpu.desc_pool_alloc_sampler(
+		&desc_pool,
+		gpu.sampler_descriptor({ max_anisotropy = min(16.0, gpu.device_limits().max_anisotropy) })
 	)
-
 
 	gbuffer_albedo, gbuffer_normal, gbuffer_metallic_roughness, depth_texture :=
 		create_gbuffer_textures(
 			u32(window_size_x),
 			u32(window_size_y),
-			texture_heap,
-			texture_rw_heap,
+			&desc_pool,
 		)
 	defer {
 		gpu.texture_free_and_destroy(&gbuffer_albedo)
@@ -317,8 +301,7 @@ main :: proc() {
 				create_gbuffer_textures(
 					u32(window_size_x),
 					u32(window_size_y),
-					texture_heap,
-					texture_rw_heap,
+					&desc_pool
 				)
 		}
 
@@ -346,6 +329,8 @@ main :: proc() {
 
 		cmd_buf := gpu.commands_begin(.Main)
 
+		gpu.cmd_set_desc_pool(cmd_buf, desc_pool)
+
 		// G-buffer pass: render geometry to multiple color attachments
 		render_pass_gbuffer(
 			cmd_buf,
@@ -355,14 +340,12 @@ main :: proc() {
 			depth_texture,
 			vert_shader_gbuffer,
 			frag_shader_gbuffer,
-			texture_heap,
-			texture_rw_heap,
-			sampler_heap,
 			frame_arena,
 			&scene,
 			meshes_gpu[:],
 			world_to_view,
 			view_to_proj,
+			sampler_id
 		)
 
 		// Final pass: composite from G-buffer
@@ -374,9 +357,6 @@ main :: proc() {
 			gbuffer_metallic_roughness,
 			vert_shader_final,
 			frag_shader_final,
-			texture_heap,
-			texture_rw_heap,
-			sampler_heap,
 			frame_arena,
 			full_screen_quad_verts,
 			full_screen_quad_indices,
@@ -400,14 +380,12 @@ render_pass_gbuffer :: proc(
 	depth_texture: gpu.Texture,
 	vert_shader: gpu.Shader,
 	frag_shader: gpu.Shader,
-	texture_heap: gpu.ptr,
-	texture_rw_heap: gpu.ptr,
-	sampler_heap: gpu.ptr,
 	frame_arena: ^gpu.Arena,
 	scene: ^shared.Scene,
 	meshes_gpu: []Mesh_GPU,
 	world_to_view: matrix[4, 4]f32,
 	view_to_proj: matrix[4, 4]f32,
+	sampler_id: u32,
 ) {
 	gpu.cmd_begin_render_pass(
 		cmd_buf,
@@ -421,9 +399,6 @@ render_pass_gbuffer :: proc(
 		},
 	)
 	gpu.cmd_set_shaders(cmd_buf, vert_shader, frag_shader)
-
-	// Set texture and sampler heaps
-	gpu.cmd_set_desc_heap(cmd_buf, texture_heap, texture_rw_heap, sampler_heap, {})
 
 	gpu.cmd_set_depth_state(cmd_buf, {mode = {.Read, .Write}, compare = .Less})
 
@@ -467,11 +442,11 @@ render_pass_gbuffer :: proc(
 		frag_data := gpu.arena_alloc(frame_arena, Frag_Data)
 		frag_data.cpu^ = {
 			base_color_map                 = base_color_map,
-			base_color_map_sampler         = 0,
+			base_color_map_sampler         = sampler_id,
 			metallic_roughness_map         = metallic_roughness_map,
-			metallic_roughness_map_sampler = 0,
+			metallic_roughness_map_sampler = sampler_id,
 			normal_map                     = normal_map,
-			normal_map_sampler             = 0,
+			normal_map_sampler             = sampler_id,
 		}
 
 		gpu.cmd_draw_indexed_instanced(
@@ -497,9 +472,6 @@ render_pass_final :: proc(
 	gbuffer_metallic_roughness: gpu.Texture,
 	vert_shader: gpu.Shader,
 	frag_shader: gpu.Shader,
-	texture_heap: gpu.ptr,
-	texture_rw_heap: gpu.ptr,
-	sampler_heap: gpu.ptr,
 	frame_arena: ^gpu.Arena,
 	fsq_verts: gpu.slice_t(Fullscreen_Vertex),
 	fsq_indices: gpu.slice_t(u32),
@@ -509,9 +481,6 @@ render_pass_final :: proc(
 		{color_attachments = {{texture = swapchain, clear_color = {0.7, 0.7, 0.7, 1.0}}}},
 	)
 	gpu.cmd_set_shaders(cmd_buf, vert_shader, frag_shader)
-
-	// Set texture and sampler heaps
-	gpu.cmd_set_desc_heap(cmd_buf, texture_heap, texture_rw_heap, sampler_heap, {})
 
 	// Disable depth testing for fullscreen quad
 	gpu.cmd_set_depth_state(cmd_buf, {mode = {}, compare = .Always})
@@ -553,8 +522,7 @@ render_pass_final :: proc(
 create_gbuffer_textures :: proc(
 	window_size_x: u32,
 	window_size_y: u32,
-	texture_heap: gpu.ptr,
-	texture_rw_heap: gpu.ptr,
+	desc_pool: ^gpu.Descriptor_Pool,
 ) -> (
 	gbuffer_albedo: gpu.Owned_Texture,
 	gbuffer_normal: gpu.Owned_Texture,
@@ -576,15 +544,9 @@ create_gbuffer_textures :: proc(
 	// Albedo
 	{
 		new_gbuffer_albedo := gpu.texture_alloc_and_create(gbuffer_desc)
-		gpu.set_texture_desc(
-			texture_heap,
-			GBUFFER_ALBEDO_IDX,
-			gpu.texture_view_descriptor(new_gbuffer_albedo, {format = .RGBA8_Unorm}),
-		)
-		gpu.set_texture_rw_desc(
-			texture_rw_heap,
-			GBUFFER_ALBEDO_IDX,
-			gpu.texture_rw_view_descriptor(new_gbuffer_albedo, {format = .RGBA8_Unorm}),
+		GBUFFER_ALBEDO_IDX = gpu.desc_pool_alloc_texture(
+			desc_pool,
+			gpu.texture_view_descriptor(new_gbuffer_albedo, {})
 		)
 		gbuffer_albedo = new_gbuffer_albedo
 	}
@@ -592,15 +554,9 @@ create_gbuffer_textures :: proc(
 	// Normal
 	{
 		new_gbuffer_normal := gpu.texture_alloc_and_create(gbuffer_desc)
-		gpu.set_texture_rw_desc(
-			texture_rw_heap,
-			GBUFFER_NORMAL_IDX,
-			gpu.texture_rw_view_descriptor(new_gbuffer_normal, {format = .RGBA8_Unorm}),
-		)
-		gpu.set_texture_desc(
-			texture_heap,
-			GBUFFER_NORMAL_IDX,
-			gpu.texture_view_descriptor(new_gbuffer_normal, {format = .RGBA8_Unorm}),
+		GBUFFER_NORMAL_IDX = gpu.desc_pool_alloc_texture(
+			desc_pool,
+			gpu.texture_view_descriptor(new_gbuffer_normal, {})
 		)
 		gbuffer_normal = new_gbuffer_normal
 	}
@@ -608,18 +564,9 @@ create_gbuffer_textures :: proc(
 	// Metallic roughness
 	{
 		new_gbuffer_metallic_roughness := gpu.texture_alloc_and_create(gbuffer_desc)
-		gpu.set_texture_desc(
-			texture_heap,
-			GBUFFER_METALLIC_ROUGHNESS_IDX,
-			gpu.texture_view_descriptor(new_gbuffer_metallic_roughness, {format = .RGBA8_Unorm}),
-		)
-		gpu.set_texture_rw_desc(
-			texture_rw_heap,
-			GBUFFER_METALLIC_ROUGHNESS_IDX,
-			gpu.texture_rw_view_descriptor(
-				new_gbuffer_metallic_roughness,
-				{format = .RGBA8_Unorm},
-			),
+		GBUFFER_METALLIC_ROUGHNESS_IDX = gpu.desc_pool_alloc_texture(
+			desc_pool,
+			gpu.texture_view_descriptor(new_gbuffer_metallic_roughness, {})
 		)
 		gbuffer_metallic_roughness = new_gbuffer_metallic_roughness
 	}
@@ -637,7 +584,6 @@ create_gbuffer_textures :: proc(
 create_magenta_texture :: proc(
 	upload_arena: ^gpu.Arena,
 	cmd_buf: gpu.Command_Buffer,
-	texture_heap: gpu.ptr,
 ) -> gpu.Owned_Texture {
 	magenta_pixels := [4]u8{255, 0, 255, 255}
 	staging := gpu.arena_alloc(upload_arena, u8, 4)
@@ -652,11 +598,6 @@ create_magenta_texture :: proc(
 		},
 	)
 	gpu.cmd_copy_to_texture(cmd_buf, texture, staging, texture.mem)
-	gpu.set_texture_desc(
-		texture_heap,
-		shared.MISSING_TEXTURE_ID,
-		gpu.texture_view_descriptor(texture, {format = .RGBA8_Unorm}),
-	)
 	return texture
 }
 
@@ -714,7 +655,7 @@ load_scene_textures_from_gltf :: proc(
 	texture_infos: []shared.Gltf_Texture_Info,
 	data: ^gltf2.Data,
 	scene: ^shared.Scene,
-	texture_heap: gpu.ptr,
+	desc_pool: ^gpu.Descriptor_Pool,
 ) {
 	upload_arena := gpu.arena_init()
 	defer gpu.arena_destroy(&upload_arena)
@@ -738,8 +679,6 @@ load_scene_textures_from_gltf :: proc(
 			sync.mutex_unlock(&mutex)
 			sync.one_shot_event_wait(event)
 		} else {
-			texture_idx := next_texture_idx
-			next_texture_idx += 1
 			event := new(sync.One_Shot_Event)
 			image_uploaded[info.image_index] = event
 			sync.mutex_unlock(&mutex)
@@ -750,6 +689,7 @@ load_scene_textures_from_gltf :: proc(
             )
             defer image.destroy(img)
 
+			texture_idx: u32
             if Compress_Textures {
                 compressed := shared.bc3_compress_rgba8_mips(
                     img.pixels.buf[:],
@@ -764,6 +704,7 @@ load_scene_textures_from_gltf :: proc(
                     &upload_arena
                 )
 
+				texture_idx = gpu.desc_pool_alloc_texture(desc_pool, gpu.texture_view_descriptor(texture, {}))
                 if sync.guard(&mutex) do image_to_texture[info.image_index] = {texture, texture_idx}
             } else {
                 texture := upload_texture(
@@ -771,6 +712,7 @@ load_scene_textures_from_gltf :: proc(
                     &upload_arena
                 )
 
+				texture_idx = gpu.desc_pool_alloc_texture(desc_pool, gpu.texture_view_descriptor(texture, {}))
                 if sync.guard(&mutex) do image_to_texture[info.image_index] = {texture, texture_idx}
             }
 
@@ -802,14 +744,6 @@ load_scene_textures_from_gltf :: proc(
 		case .Normal:
 			scene.meshes[info.mesh_id].normal_map = texture.texture_idx
 		}
-
-		view_format: gpu.Texture_Format = .RGBA8_Unorm
-		if Compress_Textures do view_format = .BC3_RGBA_Unorm
-		gpu.set_texture_desc(
-			texture_heap,
-			texture.texture_idx,
-			gpu.texture_view_descriptor(texture.texture, {format = view_format}),
-		)
 	}
 }
 

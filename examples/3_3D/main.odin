@@ -69,7 +69,7 @@ main :: proc()
     upload_arena := gpu.arena_init()
     defer gpu.arena_destroy(&upload_arena)
 
-    scene, _, gltf_data := shared.load_scene_gltf(Sponza_Scene)
+    scene, _, gltf_data := shared.load_scene_gltf(Sponza_Scene, 0)
     defer {
         shared.destroy_scene(&scene)
         gltf2.unload(gltf_data)

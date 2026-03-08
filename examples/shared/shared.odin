@@ -16,8 +16,6 @@ import intr "base:intrinsics"
 
 import sdl "vendor:sdl3"
 
-MISSING_TEXTURE_ID :: 0
-
 Texture_Type :: enum {
 	Base_Color,
 	Metallic_Roughness,
@@ -554,6 +552,7 @@ buffer_slice_with_stride :: proc(
 
 load_scene_gltf :: proc(
 	contents: []byte,
+	missing_texture_id: u32,
 ) -> (
 	Scene,
 	[]Gltf_Texture_Info,
@@ -650,9 +649,9 @@ load_scene_gltf :: proc(
 			}
 
 			mesh_idx := u32(len(meshes))
-			base_color_map: u32 = MISSING_TEXTURE_ID
-			metallic_roughness_map: u32 = MISSING_TEXTURE_ID
-			normal_map: u32 = MISSING_TEXTURE_ID
+			base_color_map: u32 = missing_texture_id
+			metallic_roughness_map: u32 = missing_texture_id
+			normal_map: u32 = missing_texture_id
 
 			if primitive.material != nil {
 				material_idx := primitive.material.?

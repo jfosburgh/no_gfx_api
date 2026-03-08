@@ -1,9 +1,14 @@
 
+#+vet !unused-imports
+
 package gpu
 
 import "base:runtime"
 import intr "base:intrinsics"
 import "core:slice"
+import "core:sync"
+import mem "core:mem"
+import "core:math"
 
 import sdl "vendor:sdl3"
 import vk "vendor:vulkan"
@@ -365,9 +370,6 @@ cmd_build_tlas: proc(cmd_buf: Command_Buffer, bvh: BVH, bvh_storage, scratch_sto
 /////////////////////////
 // Userland Utilities
 
-// Otherwise -vet complains, it's only used in generics.
-_fictitious :: proc() { slice.swap([]int {}, 1, 2) }
-
 // Memory
 
 ptr_apply_offset :: #force_inline proc(addr: ^ptr, #any_int offset: i64)
@@ -592,34 +594,6 @@ texture_free_and_destroy :: proc(texture: ^Owned_Texture)
     texture^ = {}
 }
 
-set_texture_desc :: #force_inline proc(desc_heap: ptr, idx: u32, desc: Texture_Descriptor)
-{
-    desc_size := #force_inline texture_view_descriptor_size()
-    tmp := desc
-    runtime.mem_copy(auto_cast(uintptr(desc_heap.cpu) + uintptr(idx * desc_size)), &tmp, int(desc_size))
-}
-
-set_texture_rw_desc :: #force_inline proc(desc_heap: ptr, idx: u32, desc: Texture_Descriptor)
-{
-    desc_size := #force_inline texture_rw_view_descriptor_size()
-    tmp := desc
-    runtime.mem_copy(auto_cast(uintptr(desc_heap.cpu) + uintptr(idx * desc_size)), &tmp, int(desc_size))
-}
-
-set_sampler_desc :: #force_inline proc(desc_heap: ptr, idx: u32, desc: Sampler_Descriptor)
-{
-    desc_size := #force_inline sampler_descriptor_size()
-    tmp := desc
-    runtime.mem_copy(auto_cast(uintptr(desc_heap.cpu) + uintptr(idx * desc_size)), &tmp, int(desc_size))
-}
-
-set_bvh_desc :: #force_inline proc(desc_heap: ptr, idx: u32, desc: BVH_Descriptor)
-{
-    desc_size := #force_inline bvh_descriptor_size()
-    tmp := desc
-    runtime.mem_copy(auto_cast(uintptr(desc_heap.cpu) + uintptr(idx * desc_size)), &tmp, int(desc_size))
-}
-
 Owned_BVH :: struct
 {
     using handle: BVH,
@@ -715,4 +689,292 @@ cmd_scoped_render_pass :: #force_inline proc(cmd_buf: Command_Buffer, desc: Rend
 cmd_scoped_render_pass_end :: #force_inline proc(scope_out: Scoped_Render_Pass_Out)
 {
     cmd_end_render_pass(scope_out.cmd_buf, scope_out.loc)
+}
+
+// Descriptors
+
+@(private="file")
+Descriptor_Pool_Freelist :: struct
+{
+    el_count: u8,
+    free: [dynamic]u32,
+}
+
+@(private="file")
+Descriptor_Pool_Resource :: struct($T: typeid)
+{
+    addr: ptr,
+    res_size: u32,
+    res_count: u32,  // Current number of allocated descriptors in addr.
+    res_capacity: u32,
+    lock: sync.Atomic_Mutex,
+    freelists: [dynamic]Descriptor_Pool_Freelist,  // One freelist per allocation size.
+    alloc_size: [dynamic]u8,  // byte i contains the number of descriptors for allocation of index i.
+    default_res: T,
+}
+
+// Simple allocator of descriptor indices. Thread-safe.
+Descriptor_Pool :: struct
+{
+    texture_pool: Descriptor_Pool_Resource(Texture_Descriptor),
+    texture_rw_pool: Descriptor_Pool_Resource(Texture_Descriptor),
+    sampler_pool: Descriptor_Pool_Resource(Sampler_Descriptor),
+    bvh_pool: Descriptor_Pool_Resource(BVH_Descriptor),
+}
+
+// Using null descriptors most likely will result in a crash
+// and driver reset. The user can define global resources to
+// be used instead (e.g. a magenta texture).
+desc_pool_create :: proc(#any_int texture_count: i64 = 65535,
+                         #any_int texture_rw_count: i64 = 256,
+                         #any_int sampler_count: i64 = 256,
+                         #any_int bvh_count: i64 = 256,
+                         default_texture_desc := Texture_Descriptor {},
+                         default_texture_rw_desc := Texture_Descriptor {},
+                         default_sampler_desc := Sampler_Descriptor {},
+                         default_bvh_desc := BVH_Descriptor {},
+                         loc := #caller_location) -> Descriptor_Pool
+{
+    res: Descriptor_Pool
+    res.texture_pool = desc_pool_resource_init(texture_view_descriptor_size(), texture_count, default_texture_desc)
+    res.sampler_pool = desc_pool_resource_init(sampler_descriptor_size(), sampler_count, default_sampler_desc)
+    res.texture_rw_pool = desc_pool_resource_init(texture_rw_view_descriptor_size(), texture_rw_count, default_texture_rw_desc)
+    res.bvh_pool = desc_pool_resource_init(bvh_descriptor_size(), texture_count, default_bvh_desc)
+    return res
+}
+
+desc_pool_destroy :: proc(pool: ^Descriptor_Pool, loc := #caller_location)
+{
+    desc_pool_resource_destroy(&pool.texture_pool)
+    desc_pool_resource_destroy(&pool.texture_rw_pool)
+    desc_pool_resource_destroy(&pool.sampler_pool)
+    desc_pool_resource_destroy(&pool.bvh_pool)
+    pool^ = {}
+}
+
+// Passing multiple descriptors to desc_pool_alloc_X is useful for contiguous descriptors.
+// One usecase for this is to group descriptors into contiguous sets. This enables grouping
+// based on update frequency and so on. In the shader you can store a single index and then
+// do something like:
+// texture_sample(material_base_id + 0, ...);
+// texture_sample(material_base_id + 1, ...);
+// texture_sample(material_base_id + 2, ...);
+
+desc_pool_alloc_texture :: proc { desc_pool_alloc_texture_single, desc_pool_alloc_texture_multi }
+desc_pool_alloc_texture_rw :: proc { desc_pool_alloc_texture_rw_single, desc_pool_alloc_texture_rw_multi }
+desc_pool_alloc_sampler :: proc { desc_pool_alloc_sampler_single, desc_pool_alloc_sampler_multi }
+desc_pool_alloc_bvh :: proc { desc_pool_alloc_bvh_single, desc_pool_alloc_bvh_multi }
+
+desc_pool_alloc_texture_single :: #force_inline proc(pool: ^Descriptor_Pool, desc: Texture_Descriptor) -> u32 {
+    return desc_pool_alloc_texture_multi(pool, { desc })
+}
+desc_pool_alloc_texture_rw_single :: #force_inline proc(pool: ^Descriptor_Pool, desc: Texture_Descriptor) -> u32 {
+    return desc_pool_alloc_texture_rw_multi(pool, { desc })
+}
+desc_pool_alloc_sampler_single :: #force_inline proc(pool: ^Descriptor_Pool, desc: Sampler_Descriptor) -> u32 {
+    return desc_pool_alloc_sampler_multi(pool, { desc })
+}
+desc_pool_alloc_bvh_single :: #force_inline proc(pool: ^Descriptor_Pool, desc: BVH_Descriptor) -> u32 {
+    return desc_pool_alloc_bvh_multi(pool, { desc })
+}
+
+desc_pool_update_texture :: #force_inline proc(pool: ^Descriptor_Pool, idx: u32, desc: Texture_Descriptor) {
+    desc_pool_resource_update(&pool.texture_pool, idx, desc)
+}
+desc_pool_update_texture_rw :: #force_inline proc(pool: ^Descriptor_Pool, idx: u32, desc: Texture_Descriptor) {
+    desc_pool_resource_update(&pool.texture_rw_pool, idx, desc)
+}
+desc_pool_update_sampler :: #force_inline proc(pool: ^Descriptor_Pool, idx: u32, desc: Sampler_Descriptor) {
+    desc_pool_resource_update(&pool.sampler_pool, idx, desc)
+}
+desc_pool_update_bvh :: #force_inline proc(pool: ^Descriptor_Pool, idx: u32, desc: BVH_Descriptor) {
+    desc_pool_resource_update(&pool.bvh_pool, idx, desc)
+}
+
+desc_pool_free_texture :: #force_inline proc(pool: ^Descriptor_Pool, idx: u32) {
+    desc_pool_resource_free(&pool.texture_pool, idx)
+}
+desc_pool_free_texture_rw :: #force_inline proc(pool: ^Descriptor_Pool, idx: u32) {
+    desc_pool_resource_free(&pool.texture_rw_pool, idx)
+}
+desc_pool_free_sampler :: #force_inline proc(pool: ^Descriptor_Pool, idx: u32) {
+    desc_pool_resource_free(&pool.sampler_pool, idx)
+}
+desc_pool_free_bvh :: #force_inline proc(pool: ^Descriptor_Pool, idx: u32) {
+    desc_pool_resource_free(&pool.bvh_pool, idx)
+}
+
+desc_pool_free_all :: proc(pool: ^Descriptor_Pool)
+{
+    // Memset everything to 0 in debug
+    when ODIN_DEBUG
+    {
+        desc_pool_resource_mem_reset(&pool.texture_pool)
+        desc_pool_resource_mem_reset(&pool.texture_rw_pool)
+        desc_pool_resource_mem_reset(&pool.sampler_pool)
+        desc_pool_resource_mem_reset(&pool.bvh_pool)
+    }
+
+    desc_pool_resource_free_all(&pool.texture_pool)
+    desc_pool_resource_free_all(&pool.texture_rw_pool)
+    desc_pool_resource_free_all(&pool.sampler_pool)
+    desc_pool_resource_free_all(&pool.bvh_pool)
+}
+
+desc_pool_alloc_texture_multi :: proc(pool: ^Descriptor_Pool, textures: []Texture_Descriptor) -> u32
+{
+    assert(len(textures) <= int(max(u8)))
+    idx := desc_pool_resource_alloc(&pool.texture_pool, i64(len(textures)))
+    for texture in textures {
+        desc_pool_resource_update(&pool.texture_pool, idx, texture)
+    }
+    return idx
+}
+
+desc_pool_alloc_texture_rw_multi :: proc(pool: ^Descriptor_Pool, textures_rw: []Texture_Descriptor) -> u32
+{
+    assert(len(textures_rw) <= int(max(u8)))
+    idx := desc_pool_resource_alloc(&pool.texture_rw_pool, i64(len(textures_rw)))
+    for texture_rw in textures_rw {
+        desc_pool_resource_update(&pool.texture_rw_pool, idx, texture_rw)
+    }
+    return idx
+}
+
+desc_pool_alloc_sampler_multi :: proc(pool: ^Descriptor_Pool, samplers: []Sampler_Descriptor) -> u32
+{
+    assert(len(samplers) <= int(max(u8)))
+    idx := desc_pool_resource_alloc(&pool.sampler_pool, i64(len(samplers)))
+    for sampler in samplers {
+        desc_pool_resource_update(&pool.sampler_pool, idx, sampler)
+    }
+    return idx
+}
+
+desc_pool_alloc_bvh_multi :: proc(pool: ^Descriptor_Pool, bvhs: []BVH_Descriptor) -> u32
+{
+    assert(len(bvhs) <= int(max(u8)))
+    idx := desc_pool_resource_alloc(&pool.bvh_pool, i64(len(bvhs)))
+    for bvh in bvhs {
+        desc_pool_resource_update(&pool.bvh_pool, idx, bvh)
+    }
+    return idx
+}
+
+cmd_set_desc_pool :: #force_inline proc(cmd_buf: Command_Buffer, pool: Descriptor_Pool, loc := #caller_location) {
+    cmd_set_desc_heap(cmd_buf, pool.texture_pool.addr, pool.texture_rw_pool.addr, pool.sampler_pool.addr, pool.bvh_pool.addr, loc = loc)
+}
+
+@(private="file")
+desc_pool_resource_init :: proc(res_size: u32, res_count: i64, default_res: $T) -> Descriptor_Pool_Resource(T)
+{
+    assert(res_count > 0)
+    assert(res_size > 0)
+
+    res: Descriptor_Pool_Resource(T)
+    res.addr = mem_alloc_raw(res_size, res_count, 16, alloc_type = .Descriptors)
+    res.res_size = res_size
+    res.res_count = 0
+    res.res_capacity = u32(res_count)
+    res.default_res = default_res
+    desc_pool_resource_mem_reset(&res)
+    return res
+}
+
+@(private="file")
+desc_pool_resource_alloc :: proc(pool: ^Descriptor_Pool_Resource($T), count: i64) -> u32
+{
+    assert(count > 0)
+    assert(count <= i64(max(u8)))
+    sync.guard(&pool.lock)
+
+    found: ^Descriptor_Pool_Freelist
+    for &freelist in pool.freelists
+    {
+        if len(freelist.free) <= 0 do continue
+
+        if i64(freelist.el_count) == count {
+            found = &freelist
+            break
+        }
+    }
+
+    if found != nil
+    {
+        free_slot := pop(&found.free)
+        pool.alloc_size[free_slot] = u8(count)
+        return free_slot
+    }
+    else
+    {
+        assert(pool.res_count + u32(count) < pool.res_capacity)
+        free_slot := pool.res_count
+        pool.res_count += u32(count)
+        resize(&pool.alloc_size, pool.res_count)
+        pool.alloc_size[free_slot] = u8(count)
+        return free_slot
+    }
+}
+
+@(private="file")
+desc_pool_resource_update :: #force_inline proc(pool: ^Descriptor_Pool_Resource($T), idx: u32, desc: T)
+{
+    assert(size_of(desc) >= pool.res_size)
+    desc_tmp := desc
+    intr.mem_copy(rawptr(uintptr(pool.addr.cpu) + uintptr(pool.res_size * idx)), &desc_tmp, pool.res_size)
+}
+
+@(private="file")
+desc_pool_resource_free :: proc(pool: ^Descriptor_Pool_Resource($T), idx: u32)
+{
+    sync.guard(&pool.lock)
+
+    count := pool.alloc_size[idx]
+
+    found: ^Descriptor_Pool_Freelist
+    for &freelist in pool.freelists
+    {
+        if len(freelist.free) <= 0 do continue
+
+        if freelist.el_count == count {
+            found = &freelist
+            break
+        }
+    }
+
+    if found == nil
+    {
+        append(&pool.freelists, Descriptor_Pool_Freelist {
+            el_count = count,
+            free = {},
+        })
+
+        found = &pool.freelists[len(pool.freelists)-1]
+    }
+
+    append(&found.free, idx)
+}
+
+// Reset all slots to default descriptor
+@(private="file")
+desc_pool_resource_mem_reset :: #force_inline proc(pool: ^Descriptor_Pool_Resource($T))
+{
+    for i in 0..<pool.res_count {
+        desc_pool_resource_update(pool, i, pool.default_res)
+    }
+}
+
+@(private="file")
+desc_pool_resource_free_all :: proc(pool: ^Descriptor_Pool_Resource($T))
+{
+    for &freelist in pool.freelists do delete(freelist.free)
+    delete(pool.freelists)
+    pool.res_count = 0
+}
+
+@(private="file")
+desc_pool_resource_destroy :: proc(pool: ^Descriptor_Pool_Resource($T))
+{
+    desc_pool_resource_free_all(pool)
+    mem_free_raw(pool.addr)
 }

@@ -55,10 +55,8 @@ main :: proc()
         gpu.shader_destroy(frag_shader)
     }
 
-    texture_heap := gpu.mem_alloc_raw(gpu.texture_view_descriptor_size(), 65536, 64, alloc_type = .Descriptors)
-    defer gpu.mem_free_raw(texture_heap)
-    sampler_heap := gpu.mem_alloc_raw(gpu.sampler_descriptor_size(), 10, 64, alloc_type = .Descriptors)
-    defer gpu.mem_free_raw(sampler_heap)
+    desc_pool := gpu.desc_pool_create()
+    defer gpu.desc_pool_destroy(&desc_pool)
 
     Vertex :: struct { pos: [3]f32, uv: [2]f32 }
 
@@ -107,9 +105,9 @@ main :: proc()
 
     gpu.queue_submit(.Main, { upload_cmd_buf })
 
-    gpu.set_texture_desc(texture_heap, 0, gpu.texture_view_descriptor(bowser_tex, { format = .RGBA8_Unorm }))
-    gpu.set_texture_desc(texture_heap, 1, gpu.texture_view_descriptor(peach_tex, { format = .RGBA8_Unorm }))
-    gpu.set_sampler_desc(sampler_heap, 0, gpu.sampler_descriptor({}))
+    bowser_tex_id := gpu.desc_pool_alloc_texture(&desc_pool, gpu.texture_view_descriptor(bowser_tex, {}))
+    peach_tex_id  := gpu.desc_pool_alloc_texture(&desc_pool, gpu.texture_view_descriptor(peach_tex, {}))
+    linear_sampler := gpu.desc_pool_alloc_sampler(&desc_pool, gpu.sampler_descriptor({}))
 
     now_ts := sdl.GetPerformanceCounter()
 
@@ -155,7 +153,7 @@ main :: proc()
             }
         })
         gpu.cmd_set_shaders(cmd_buf, vert_shader, frag_shader)
-        gpu.cmd_set_desc_heap(cmd_buf, texture_heap, {}, sampler_heap, {})
+        gpu.cmd_set_desc_pool(cmd_buf, desc_pool)
         Vert_Data :: struct {
             verts: rawptr,
         }
@@ -168,9 +166,9 @@ main :: proc()
             fade: f32
         }
         frag_data := gpu.arena_alloc(frame_arena, Frag_Data)
-        frag_data.cpu.texture_a = 0
-        frag_data.cpu.texture_b = 1
-        frag_data.cpu.sampler = 0
+        frag_data.cpu.texture_a = bowser_tex_id
+        frag_data.cpu.texture_b = peach_tex_id
+        frag_data.cpu.sampler = linear_sampler
         frag_data.cpu.fade = changing_fade(delta_time)
 
         gpu.cmd_draw_indexed_instanced(cmd_buf, verts_data.gpu, frag_data.gpu, indices_local, u32(len(indices.cpu)), 1)
