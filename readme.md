@@ -161,10 +161,10 @@ Output :: struct
 
 main :: (vert_id: uint @vert_id, data: ^Data @data) -> Output
 {
-    vert_out: Output;
-    vert_out.pos = vec4(data.verts[vert_id].pos.xyz, 1.0);
-    vert_out.color = vec4(data.verts[vert_id].color, 1.0);
-    return vert_out;
+    out: Output;
+    out.pos = vec4(data.verts[vert_id].pos.xyz, 1.0);
+    out.color = vec4(data.verts[vert_id].color, 1.0);
+    return out;
 }
 ```
 

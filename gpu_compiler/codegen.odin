@@ -185,7 +185,8 @@ codegen :: proc(ast: Ast, shader_type: Shader_Type, input_path: string, output_p
         {
             if arg.attr != nil do continue
 
-            writef("%v %v", type_to_glsl(arg.type), arg.name)
+            arg.glsl_name = ident_to_glsl(arg.name)
+            writef("%v %v", type_to_glsl(arg.type), arg.glsl_name)
             if i < len(decl.type.args) - 1 {
                 write(", ")
             }
@@ -199,6 +200,8 @@ codegen :: proc(ast: Ast, shader_type: Shader_Type, input_path: string, output_p
             // Declare all variables
             for var_decl in proc_def.scope.decls
             {
+                var_decl.glsl_name = ident_to_glsl(var_decl.name)
+
                 // Skip function parameters without attributes - they're already declared in the signature
                 if var_decl.attr == nil
                 {
@@ -216,7 +219,7 @@ codegen :: proc(ast: Ast, shader_type: Shader_Type, input_path: string, output_p
 
                 if var_decl.attr == nil
                 {
-                    writefln("%v %v;", type_to_glsl(var_decl.type), var_decl.name)
+                    writefln("%v %v;", type_to_glsl(var_decl.type), var_decl.glsl_name)
                 }
                 else
                 {
@@ -227,7 +230,7 @@ codegen :: proc(ast: Ast, shader_type: Shader_Type, input_path: string, output_p
                         var_decl.type^ = var_decl.type.base^
                     }
 
-                    writefln("%v %v = %v;", type_to_glsl(var_decl.type), var_decl.name, attr_glsl)
+                    writefln("%v %v = %v;", type_to_glsl(var_decl.type), var_decl.glsl_name, attr_glsl)
                 }
             }
 
@@ -293,6 +296,8 @@ codegen_statement :: proc(statement: ^Ast_Statement, insert_semi := true)
         }
         case ^Ast_Define_Var:
         {
+            stmt.decl.glsl_name = ident_to_glsl(stmt.decl.name)
+
             // NOTE: In .musl we do rq := rayquery_init(...) but in GLSL we can't set the rayquery object.
             if stmt.decl.type.primitive_kind == .Ray_Query
             {
@@ -305,7 +310,7 @@ codegen_statement :: proc(statement: ^Ast_Statement, insert_semi := true)
                         text := call_ident.token.text
                         if text == "rayquery_init"
                         {
-                            writef("rayquery_init(%v, ", stmt.decl.name)
+                            writef("rayquery_init(%v, ", stmt.decl.glsl_name)
                             codegen_expr(call.args[0])
                             write(", ")
                             codegen_expr(call.args[1])
@@ -317,7 +322,7 @@ codegen_statement :: proc(statement: ^Ast_Statement, insert_semi := true)
                 }
             }
 
-            write(stmt.decl.name)
+            write(stmt.decl.glsl_name)
             write(" = ")
             codegen_expr(stmt.expr)
             if insert_semi do write(";")
@@ -369,7 +374,11 @@ codegen_statement :: proc(statement: ^Ast_Statement, insert_semi := true)
                 writef("for(")
                 if stmt.define != nil
                 {
-                    write(stmt.define.decl.name)
+                    if stmt.define.decl.glsl_name != "" {
+                        write(stmt.define.decl.glsl_name)
+                    } else {
+                        write(stmt.define.decl.name)
+                    }
                     write(" = ")
                     codegen_expr(stmt.define.expr)
                 }
@@ -474,7 +483,11 @@ codegen_expr :: proc(expression: ^Ast_Expr)
         }
         case ^Ast_Ident_Expr:
         {
-            write(expr.token.text)
+            if expr.glsl_name != "" {
+                write(expr.glsl_name)
+            } else {
+                write(expr.token.text)
+            }
         }
         case ^Ast_Lit_Expr:
         {
@@ -567,10 +580,10 @@ codegen_expr :: proc(expression: ^Ast_Expr)
 
             if is_intrinsic do break
 
-            if expr.glsl_name == "" {
-                codegen_expr(expr.target)
-            } else {
+            if expr.glsl_name != "" {
                 write(expr.glsl_name)
+            } else {
+                codegen_expr(expr.target)
             }
             write("(")
             for arg, i in expr.args
@@ -721,10 +734,19 @@ printf_fmt_string_to_glsl :: proc(call: ^Ast_Call) -> string
     return strings.clone(strings.to_string(sb))
 }
 
+ident_to_glsl :: proc(ident: string) -> string
+{
+    scratch, _ := acquire_scratch()
+    sb := strings.builder_make_none(allocator = scratch)
+    strings.write_string(&sb, ident)
+    strings.write_rune(&sb, '_')
+    return strings.clone(strings.to_string(sb))
+}
+
 codegen_scope_decls :: proc(scope: ^Ast_Scope)
 {
     for decl in scope.decls {
-        writefln("%v %v;", type_to_glsl(decl.type), decl.name)
+        writefln("%v %v;", type_to_glsl(decl.type), ident_to_glsl(decl.name))
     }
 }
 

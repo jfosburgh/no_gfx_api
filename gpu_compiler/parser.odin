@@ -181,7 +181,10 @@ Ast_Call :: struct
 
 Ast_Ident_Expr :: struct
 {
-    using base_expr: Ast_Expr
+    using base_expr: Ast_Expr,
+
+    // Filled in by typechecker.
+    glsl_name: string,
 }
 
 Ast_Lit_Expr :: struct

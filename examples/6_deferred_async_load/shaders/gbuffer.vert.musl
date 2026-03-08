@@ -28,10 +28,10 @@ main :: (vert_id: uint @vert_id, data: ^Data @data) -> Output
 
     world_normal := data.model_to_world_normal * data.normals[vert_id];
 
-    vert_out: Output;
-    vert_out.pos = clip_pos;
-    vert_out.normal = world_normal;
-    vert_out.uv = data.uvs[vert_id];
-    vert_out.world_pos = world_pos;
-    return vert_out;
+    out: Output;
+    out.pos = clip_pos;
+    out.normal = world_normal;
+    out.uv = data.uvs[vert_id];
+    out.world_pos = world_pos;
+    return out;
 }

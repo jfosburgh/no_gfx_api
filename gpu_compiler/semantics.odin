@@ -1,9 +1,11 @@
 
 #+feature using-stmt
+#+vet !unused-imports
 
 package main
 
 import "base:runtime"
+import "core:fmt"
 
 typecheck_ast :: proc(ast: ^Ast, input_path: string, allocator: runtime.Allocator) -> bool
 {
@@ -59,6 +61,7 @@ typecheck_ast :: proc(ast: ^Ast, input_path: string, allocator: runtime.Allocato
         for decl in proc_def.scope.decls
         {
             resolve_type(&c, decl.type)
+            decl.glsl_name = ident_to_glsl(decl.name)
 
             if decl.attr != nil && decl.attr.?.type == .Data
             {
@@ -133,6 +136,7 @@ typecheck_statement :: proc(using c: ^Checker, statement: ^Ast_Statement)
         case ^Ast_Define_Var:
         {
             typecheck_expr(c, stmt.expr)
+            stmt.decl.glsl_name = ident_to_glsl(stmt.decl.name)
 
             if stmt.expr.type.kind == .None
             {
@@ -260,6 +264,7 @@ typecheck_expr :: proc(using c: ^Checker, expression: ^Ast_Expr)
                 typecheck_error(c, expr.token, "Undeclared identifier '%v'.", expr.token.text)
             } else {
                 expr.type = decl.type
+                expr.glsl_name = decl.glsl_name
             }
         }
         case ^Ast_Lit_Expr:
@@ -832,6 +837,7 @@ resolve_scope_decls :: proc(using c: ^Checker)
 {
     for decl in scope.decls
     {
+        decl.glsl_name = ident_to_glsl(decl.name)
         resolve_type(c, decl.type)
 
         if decl.type.primitive_kind == .Ray_Query || decl.type.primitive_kind == .BVH_ID {
