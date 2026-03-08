@@ -513,6 +513,12 @@ codegen_expr :: proc(expression: ^Ast_Expr)
             codegen_expr(expr.else_expr)
             write(")")
         }
+        case ^Ast_Cast:
+        {
+            writef("%v(", type_to_glsl(expr.cast_to))
+            codegen_expr(expr.expr)
+            write(")")
+        }
         case ^Ast_Member_Access:
         {
             codegen_expr(expr.target)

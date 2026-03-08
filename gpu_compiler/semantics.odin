@@ -233,6 +233,7 @@ typecheck_statement_list :: proc(using c: ^Checker, stmts: []^Ast_Statement)
 typecheck_expr :: proc(using c: ^Checker, expression: ^Ast_Expr)
 {
     expression.type = &POISON_TYPE
+    scratch, _ := acquire_scratch()
 
     expr_switch: switch expr in expression.derived_expr
     {
@@ -249,8 +250,6 @@ typecheck_expr :: proc(using c: ^Checker, expression: ^Ast_Expr)
         case ^Ast_Unary_Expr:
         {
             typecheck_expr(c, expr.expr)
-
-            scratch, _ := acquire_scratch()
 
             expr.type = unary_op_result_type(expr.op, expr.expr.type)
             if expr.type == &POISON_TYPE {
@@ -283,8 +282,6 @@ typecheck_expr :: proc(using c: ^Checker, expression: ^Ast_Expr)
         }
         case ^Ast_If_Expr:
         {
-            scratch, _ := acquire_scratch()
-
             typecheck_expr(c, expr.cond_expr)
             if !type_implicit_convert(expr.cond_expr.type, &BOOL_TYPE) {
                 typecheck_error_mismatching_types(c, expr.token, expr.cond_expr.type, &BOOL_TYPE)
@@ -296,6 +293,15 @@ typecheck_expr :: proc(using c: ^Checker, expression: ^Ast_Expr)
             if expr.type == &POISON_TYPE {
                 typecheck_error(c, expr.token, "Types for then and else expressions are incompatible: '%v' and '%v'.", type_to_string(expr.then_expr.type, arena = scratch), type_to_string(expr.else_expr.type, arena = scratch))
             }
+        }
+        case ^Ast_Cast:
+        {
+            typecheck_expr(c, expr.expr)
+
+            if !type_cast_allowed(expr.expr.type, expr.cast_to) {
+                typecheck_error(c, expr.token, "Cast not allowed for these types: from '%v' to '%v'.", type_to_string(expr.expr.type, arena = scratch), type_to_string(expr.cast_to, arena = scratch))
+            }
+            expr.type = expr.cast_to
         }
         case ^Ast_Member_Access:
         {
@@ -858,6 +864,32 @@ if_expr_result_type :: proc(then_type: ^Ast_Type, else_type: ^Ast_Type) -> ^Ast_
 
     if same_type(then_type, else_type) do return then_type
     return &POISON_TYPE
+}
+
+type_cast_allowed :: proc(from: ^Ast_Type, to: ^Ast_Type) -> bool
+{
+    if type_implicit_convert(from, to) do return true
+
+    for i in 0..<2
+    {
+        t1 := from if i == 0 else to
+        t2 := to if i == 0 else from
+
+        if type_implicit_convert(t1, &FLOAT_TYPE) && type_implicit_convert(t2, &INT_TYPE) {
+            return true
+        }
+        if type_implicit_convert(t1, &FLOAT_TYPE) && type_implicit_convert(t2, &UINT_TYPE) {
+            return true
+        }
+        if type_implicit_convert(t1, &VEC2_TYPE) && type_implicit_convert(t2, &VEC4_TYPE) {
+            return true
+        }
+        if type_implicit_convert(t1, &VEC3_TYPE) && type_implicit_convert(t2, &VEC4_TYPE) {
+            return true
+        }
+    }
+
+    return false
 }
 
 // Returns true if "from" is implicitly convertible to "to"

@@ -76,6 +76,7 @@ Any_Expr :: union
     ^Ast_Lit_Expr,
     ^Ast_Call,
     ^Ast_If_Expr,
+    ^Ast_Cast,
 }
 
 Ast_Expr :: struct
@@ -199,6 +200,13 @@ Ast_If_Expr :: struct
     cond_expr: ^Ast_Expr,
     then_expr: ^Ast_Expr,
     else_expr: ^Ast_Expr,
+}
+
+Ast_Cast :: struct
+{
+    using base_expr: Ast_Expr,
+    expr: ^Ast_Expr,
+    cast_to: ^Ast_Type,
 }
 
 // Statements
@@ -755,18 +763,33 @@ parse_expr :: proc(using p: ^Parser, prec: int = max(int)) -> ^Ast_Expr
     base_expr := &prefix_expr
     for
     {
-        prefix_op_info, is_prefix := Prefix_Ops[tokens[at].type]
-        if !is_prefix do break
-
         // Typecast
-
-        // Other prefix operators
+        if tokens[at].type == .Cast
         {
-            tmp := make_expr(p, Ast_Unary_Expr)
-            tmp.op = prefix_op_info.op
+            tmp := make_expr(p, Ast_Cast)
+            p.at += 1
+
+            required_token(p, .LParen)
+            tmp.type = parse_type(p)
+            tmp.cast_to = tmp.type
+            required_token(p, .RParen)
+
             base_expr^ = tmp
             base_expr = &tmp.expr
-            p.at += 1
+        }
+        else
+        {
+            prefix_op_info, is_prefix := Prefix_Ops[tokens[at].type]
+            if !is_prefix do break
+
+            // Other prefix operators
+            {
+                tmp := make_expr(p, Ast_Unary_Expr)
+                tmp.op = prefix_op_info.op
+                base_expr^ = tmp
+                base_expr = &tmp.expr
+                p.at += 1
+            }
         }
     }
 

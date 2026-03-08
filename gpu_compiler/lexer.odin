@@ -67,6 +67,7 @@ Token_Type :: enum
     Continue,
     Return,
     Discard,
+    Cast,
 
     // Literals
     IntLit,
@@ -90,6 +91,7 @@ Keywords := map[string]Token_Type {
     "return" = .Return,
     "true"   = .True,
     "false"  = .False,
+    "cast"   = .Cast,
 }
 One_Char_Operators := map[u8]Token_Type {
     '(' = .LParen,
@@ -437,6 +439,7 @@ token_type_to_string :: proc(type: Token_Type) -> string
         case .StrLit:       return "string literal"
         case .True:         return "true"
         case .False:        return "false"
+        case .Cast:         return "cast"
         case .EOS:          return "end of file"
     }
     return "UNKNOWN"
