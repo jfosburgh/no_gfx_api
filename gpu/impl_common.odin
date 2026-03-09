@@ -225,9 +225,9 @@ acquire_scratch :: proc(used_allocators: ..mem.Allocator) -> (mem.Allocator, vme
                     available_arena = &scratch
                     break
                 }
-
-                if available_arena != nil do break
             }
+
+            if available_arena != nil do break
         }
     }
 
