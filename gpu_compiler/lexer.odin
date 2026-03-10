@@ -8,6 +8,8 @@ import "core:fmt"
 import "core:strconv"
 import "base:runtime"
 
+import "core:sys/windows"
+
 Token_Type :: enum
 {
     Unknown = 0,
@@ -346,7 +348,11 @@ eat_all_whitespace :: proc(using lexer: ^Lexer)
 
 error_msg :: proc(file: File, token: Token, fmt_str: string, args: ..any)
 {
-    fmt.printf("%v(%v:%v): %vError%v: ", file.filename, token.line+1, token.col_start+1, "\033[31m", "\033[0m")
+    if supports_ansi() {
+        fmt.printf("%v(%v:%v): %vError%v: ", file.filename, token.line+1, token.col_start+1, "\033[31m", "\033[0m")
+    } else {
+        fmt.printf("%v(%v:%v): Error: ", file.filename, token.line+1, token.col_start+1)
+    }
     fmt.printfln(fmt_str, ..args)
     fmt.print("    ")
 
@@ -411,6 +417,24 @@ error_msg :: proc(file: File, token: Token, fmt_str: string, args: ..any)
 }
 
 // Utils
+
+supports_ansi :: proc() -> bool
+{
+    when ODIN_OS == .Windows
+    {
+        // Check if stdout is being redirected (not a real terminal)
+        handle := windows.GetStdHandle(windows.STD_OUTPUT_HANDLE)
+        mode: windows.DWORD
+        if !windows.GetConsoleMode(handle, &mode) {
+            return false  // not a real console (redirected or unsupported terminal)
+        }
+        return true
+    }
+    else
+    {
+        return true
+    }
+}
 
 is_alpha :: #force_inline proc(c: u8) -> bool
 {
