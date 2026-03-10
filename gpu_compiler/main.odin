@@ -9,12 +9,22 @@ import str "core:strings"
 import "base:runtime"
 import fp "core:path/filepath"
 
+import "core:sys/windows"
+
 main :: proc()
 {
     if len(os.args) != 2
     {
         fmt.println("Incorrect Usage. Try: gpu_compiler *.musl")
         os.exit(1)
+    }
+
+    when ODIN_OS == .Windows
+    {
+        handle := windows.GetStdHandle(windows.STD_OUTPUT_HANDLE)
+        mode: windows.DWORD
+        windows.GetConsoleMode(handle, &mode)
+        windows.SetConsoleMode(handle, mode | windows.ENABLE_VIRTUAL_TERMINAL_PROCESSING)
     }
 
     init_scratch_arenas()
@@ -49,10 +59,12 @@ main :: proc()
         os.exit(1)
     }
 
+    file := File { path, file_content }
+
     tokens := lex_file(path, file_content, allocator = perm_arena)
-    ast, ok_p := parse_file(path, tokens, allocator = perm_arena)
+    ast, ok_p := parse_file(file, tokens, allocator = perm_arena)
     if !ok_p do os.exit(1)
-    ok_t := typecheck_ast(&ast, path, allocator = perm_arena)
+    ok_t := typecheck_ast(&ast, file, allocator = perm_arena)
     if !ok_t do os.exit(1)
     codegen(ast, shader_type, path, output_path)
 

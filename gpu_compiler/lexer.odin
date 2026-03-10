@@ -133,13 +133,14 @@ Two_Char_Operators := map[string]Token_Type {
     "<<" = .RShift,
 }
 
-Token :: struct #all_or_none
+Token :: struct
 {
     type: Token_Type,
     text: string,
 
     line: u32,
     col_start: u32,
+    offset: u32,  // Offset into file
 }
 
 lex_file :: proc(filename: string, file_content: []u8, allocator: runtime.Allocator) -> []Token
@@ -170,6 +171,12 @@ Lexer :: struct
     comment_nest_level: bool
 }
 
+File :: struct
+{
+    filename: string,
+    content: []u8,
+}
+
 next_token :: proc(using lexer: ^Lexer) -> Token
 {
     eat_all_whitespace(lexer)
@@ -179,6 +186,7 @@ next_token :: proc(using lexer: ^Lexer) -> Token
         text = "",
         line = line,
         col_start = offset - line_start,
+        offset = offset,
     }
 
     if buf[offset] == 0
@@ -254,7 +262,7 @@ next_token :: proc(using lexer: ^Lexer) -> Token
 
         token.type = .StrLit
         token.text = string(buf[begin_offset:offset])
-        if offset >= u32(len(buf)) do error_msg(filename, token, "String literal does not have an end.")
+        if offset >= u32(len(buf)) do error_msg(File { filename, buf }, token, "String literal does not have an end.")
 
         offset += 1
     }
@@ -336,10 +344,74 @@ eat_all_whitespace :: proc(using lexer: ^Lexer)
     }
 }
 
-error_msg :: proc(filename: string, token: Token, fmt_str: string, args: ..any)
+error_msg :: proc(file: File, token: Token, fmt_str: string, args: ..any)
 {
-    fmt.printf("%v(%v:%v): Error: ", filename, token.line+1, token.col_start+1)
+    fmt.printf("%v(%v:%v): %vError%v: ", file.filename, token.line+1, token.col_start+1, "\033[31m", "\033[0m")
     fmt.printfln(fmt_str, ..args)
+    fmt.print("    ")
+
+    // Find and print line of code
+    offset_begin := token.offset
+    for
+    {
+        if offset_begin == 0 || is_newline(file.content[offset_begin - 1]) {
+            break
+        }
+
+        offset_begin -= 1
+    }
+    // Go to first non blank char
+    whitespace_count := u32(0)
+    for
+    {
+        if offset_begin >= u32(len(file.content)) {
+            break
+        }
+
+        offset_begin += 1
+        whitespace_count += 1
+
+        if !is_whitespace(file.content[offset_begin]) {
+            break
+        }
+    }
+
+    offset_end := token.offset
+    for
+    {
+        if offset_end >= u32(len(file.content)) || is_newline(file.content[offset_end + 1]) {
+            break
+        }
+
+        offset_end += 1
+    }
+
+    loc := string(file.content[offset_begin:offset_end+1])
+    fmt.println(loc)
+
+    // Print token underline
+    {
+        fmt.print("    ")
+        for _ in 0..<token.col_start-whitespace_count {
+            fmt.print(" ")
+        }
+
+        assert(len(token.text) > 0)
+        if len(token.text) == 1
+        {
+            fmt.print("^")
+        }
+        else
+        {
+            fmt.print("^")
+            for _ in 0..<len(token.text)-2 {
+                fmt.print("~")
+            }
+            fmt.print("^")
+        }
+
+        fmt.print("\n")
+    }
 }
 
 // Utils

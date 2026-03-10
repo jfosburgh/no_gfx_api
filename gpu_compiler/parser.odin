@@ -342,13 +342,13 @@ Ast_Type :: struct
     members: []^Ast_Decl,
 }
 
-parse_file :: proc(filename: string, tokens: []Token, allocator: runtime.Allocator) -> (Ast, bool)
+parse_file :: proc(file: File, tokens: []Token, allocator: runtime.Allocator) -> (Ast, bool)
 {
     context.allocator = allocator
 
     parser := Parser {
         tokens = tokens,
-        filename = filename,
+        file = file,
     }
     ast := _parse_file(&parser)
     return ast, !parser.error
@@ -357,7 +357,7 @@ parse_file :: proc(filename: string, tokens: []Token, allocator: runtime.Allocat
 Parser :: struct
 {
     tokens: []Token,
-    filename: string,
+    file: File,
     at: u32,
     error: bool,
     scope: ^Ast_Scope,
@@ -1116,7 +1116,7 @@ parse_error_on_token :: proc(using p: ^Parser, token: Token, fmt_str: string, ar
 {
     if error do return
 
-    error_msg(filename, token, fmt_str, ..args)
+    error_msg(file, token, fmt_str, ..args)
     error = true
 }
 

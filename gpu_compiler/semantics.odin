@@ -7,13 +7,13 @@ package main
 import "base:runtime"
 import "core:fmt"
 
-typecheck_ast :: proc(ast: ^Ast, input_path: string, allocator: runtime.Allocator) -> bool
+typecheck_ast :: proc(ast: ^Ast, file: File, allocator: runtime.Allocator) -> bool
 {
     context.allocator = allocator
 
     c := Checker {
         ast = ast,
-        input_path = input_path,
+        file = file,
         scope = ast.scope,
         error = false,
         cur_proc = nil,
@@ -111,7 +111,7 @@ Checker :: struct #all_or_none
     ast: ^Ast,
     cur_proc: ^Ast_Proc_Def,
     scope: ^Ast_Scope,
-    input_path: string,
+    file: File,
     error: bool,
     proc_ret: ^Ast_Return,
 }
@@ -458,21 +458,21 @@ typecheck_expr :: proc(using c: ^Checker, expression: ^Ast_Expr)
 }
 
 POISON_TYPE := Ast_Type { kind = .Poison }
-FLOAT_TYPE := Ast_Type { kind = .Primitive, primitive_kind = .Float, name = { text = "float", line = {}, type = {}, col_start = {} } }
-UINT_TYPE := Ast_Type { kind = .Primitive, primitive_kind = .Uint, name = { text = "uint", line = {}, type = {}, col_start = {} } }
-UNTYPED_FLOAT_TYPE := Ast_Type { kind = .Primitive, primitive_kind = .Untyped_Float, name = { text = "untyped float", line = {}, type = {}, col_start = {} } }
-UNTYPED_INT_TYPE := Ast_Type { kind = .Primitive, primitive_kind = .Untyped_Int, name = { text = "untyped int", line = {}, type = {}, col_start = {} } }
-INT_TYPE := Ast_Type { kind = .Primitive, primitive_kind = .Int, name = { text = "int", line = {}, type = {}, col_start = {} } }
-VEC2_TYPE := Ast_Type { kind = .Primitive, primitive_kind = .Vec2, name = { text = "vec2", line = 0, type = {}, col_start = {} } }
-VEC3_TYPE := Ast_Type { kind = .Primitive, primitive_kind = .Vec3, name = { text = "vec3", line = 0, type = {}, col_start = {} } }
-VEC4_TYPE := Ast_Type { kind = .Primitive, primitive_kind = .Vec4, name = { text = "vec4", line = 0, type = {}, col_start = {} } }
-BOOL_TYPE := Ast_Type { kind = .Primitive, primitive_kind = .Bool, name = { text = "bool", line = 0, type = {}, col_start = {} } }
-TEXTUREID_TYPE := Ast_Type { kind = .Primitive, primitive_kind = .Texture_ID, name = { text = "textureid", line = {}, type = {}, col_start = {} } }
-SAMPLERID_TYPE := Ast_Type { kind = .Primitive, primitive_kind = .Sampler_ID, name = { text = "samplerid", line = {}, type = {}, col_start = {} } }
-BVH_ID_TYPE := Ast_Type { kind = .Primitive, primitive_kind = .BVH_ID, name = { text = "bvh_id", line = {}, type = {}, col_start = {} } }
-MAT4_TYPE := Ast_Type { kind = .Primitive, primitive_kind = .Mat4, name = { text = "mat4", line = 0, type = {}, col_start = {} } }
-STRING_TYPE := Ast_Type { kind = .Primitive, primitive_kind = .String, name = { text = "string", line = 0, type = {}, col_start = {} } }
-RAYQUERY_TYPE := Ast_Type { kind = .Primitive, primitive_kind = .Ray_Query, name = { text = "Ray_Query", line = {}, type = {}, col_start = {} } }
+FLOAT_TYPE := Ast_Type { kind = .Primitive, primitive_kind = .Float, name = { text = "float" } }
+UINT_TYPE := Ast_Type { kind = .Primitive, primitive_kind = .Uint, name = { text = "uint" } }
+UNTYPED_FLOAT_TYPE := Ast_Type { kind = .Primitive, primitive_kind = .Untyped_Float, name = { text = "untyped float" } }
+UNTYPED_INT_TYPE := Ast_Type { kind = .Primitive, primitive_kind = .Untyped_Int, name = { text = "untyped int" } }
+INT_TYPE := Ast_Type { kind = .Primitive, primitive_kind = .Int, name = { text = "int" } }
+VEC2_TYPE := Ast_Type { kind = .Primitive, primitive_kind = .Vec2, name = { text = "vec2" } }
+VEC3_TYPE := Ast_Type { kind = .Primitive, primitive_kind = .Vec3, name = { text = "vec3" } }
+VEC4_TYPE := Ast_Type { kind = .Primitive, primitive_kind = .Vec4, name = { text = "vec4" } }
+BOOL_TYPE := Ast_Type { kind = .Primitive, primitive_kind = .Bool, name = { text = "bool" } }
+TEXTUREID_TYPE := Ast_Type { kind = .Primitive, primitive_kind = .Texture_ID, name = { text = "textureid" } }
+SAMPLERID_TYPE := Ast_Type { kind = .Primitive, primitive_kind = .Sampler_ID, name = { text = "samplerid" } }
+BVH_ID_TYPE := Ast_Type { kind = .Primitive, primitive_kind = .BVH_ID, name = { text = "bvh_id" } }
+MAT4_TYPE := Ast_Type { kind = .Primitive, primitive_kind = .Mat4, name = { text = "mat4" } }
+STRING_TYPE := Ast_Type { kind = .Primitive, primitive_kind = .String, name = { text = "string" } }
+RAYQUERY_TYPE := Ast_Type { kind = .Primitive, primitive_kind = .Ray_Query, name = { text = "Ray_Query" } }
 
 same_type :: proc(type1: ^Ast_Type, type2: ^Ast_Type) -> bool
 {
@@ -543,7 +543,7 @@ typecheck_error :: proc(using c: ^Checker, token: Token, fmt_str: string, args: 
 {
     if error do return
 
-    error_msg(input_path, token, fmt_str, ..args)
+    error_msg(file, token, fmt_str, ..args)
     error = true
 }
 
@@ -554,7 +554,7 @@ typecheck_error_mismatching_types :: proc(using c: ^Checker, token: Token, type1
     scratch, _ := acquire_scratch()
     type1_str := type_to_string(type1, arena = scratch)
     type2_str := type_to_string(type2, arena = scratch)
-    error_msg(input_path, token, "Incompatible types: '%v' and '%v'", type1_str, type2_str)
+    error_msg(file, token, "Incompatible types: '%v' and '%v'", type1_str, type2_str)
     error = true
 }
 
@@ -562,7 +562,7 @@ typecheck_error_redeclaration :: proc(using c: ^Checker, decl_before: ^Ast_Decl,
 {
     if error do return
 
-    error_msg(input_path, decl_after.token, "Redeclaration of '%v' in this scope.", decl_after.name)
+    error_msg(file, decl_after.token, "Redeclaration of '%v' in this scope.", decl_after.name)
     error = true
 }
 
