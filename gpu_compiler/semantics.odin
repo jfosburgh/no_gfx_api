@@ -328,35 +328,13 @@ typecheck_expr :: proc(using c: ^Checker, expression: ^Ast_Expr)
             typecheck_expr(c, expr.target)
             if expr.target.type.kind == .Poison do break
 
-            if expr.member_name == "xyz"
+            if expr.target.type.kind == .Primitive
             {
-                expr.type = &VEC3_TYPE
-                break
-            }
-            else if expr.member_name == "xy"
-            {
-                expr.type = &VEC2_TYPE
-                break
-            }
-            else if expr.member_name == "x"
-            {
-                expr.type = &FLOAT_TYPE
-                break
-            }
-            else if expr.member_name == "y"
-            {
-                expr.type = &FLOAT_TYPE
-                break
-            }
-            else if expr.member_name == "z"
-            {
-                expr.type = &FLOAT_TYPE
-                break
-            }
-            else if expr.member_name == "w"
-            {
-                expr.type = &FLOAT_TYPE
-                break
+                type, is_swizzle := handle_vector_swizzle(expr.target.type, expr.member_name)
+                if is_swizzle {
+                    expr.type = type
+                    break
+                }
             }
 
             base := type_get_base(expr.target.type)
@@ -364,6 +342,7 @@ typecheck_expr :: proc(using c: ^Checker, expression: ^Ast_Expr)
 
             if base.kind != .Struct {
                 typecheck_error(c, expr.token, "Can't access members on this type.")
+                break
             }
 
             field_type := &POISON_TYPE
@@ -1011,4 +990,64 @@ check_printf :: proc(using c: ^Checker, call: ^Ast_Call) -> bool
     // TODO: Check for unallowed types in varargs.
 
     return true
+}
+
+handle_vector_swizzle :: proc(expr_type: ^Ast_Type, str: string) -> (res: ^Ast_Type, is_swizzle: bool)
+{
+    if str == "" do return &POISON_TYPE, false
+    if len(str) > 4 do return &POISON_TYPE, false
+
+    is_xyzw: bool
+    is_rgba: bool
+    switch str[0]
+    {
+        case 'x', 'y', 'z', 'w': is_xyzw = true
+        case 'r', 'g', 'b', 'a': is_rgba = true
+    }
+
+    if !is_xyzw && !is_rgba do return &POISON_TYPE, false
+
+    if is_xyzw
+    {
+        for c in str[1:]
+        {
+            switch c
+            {
+                case 'x', 'y', 'z', 'w': {}
+                case: return &POISON_TYPE, false
+            }
+        }
+    }
+    if is_rgba
+    {
+        for c in str[1:]
+        {
+            switch c
+            {
+                case 'r', 'g', 'b', 'a': {}
+                case: return &POISON_TYPE, false
+            }
+        }
+    }
+
+    el_count: int
+    #partial switch expr_type.primitive_kind
+    {
+        case .Float: el_count = 1
+        case .Vec2: el_count = 2
+        case .Vec3: el_count = 3
+        case .Vec4: el_count = 4
+        case: return &POISON_TYPE, false
+    }
+
+    if el_count < len(str) do return &POISON_TYPE, false
+
+    switch len(str)
+    {
+        case 1: return &FLOAT_TYPE, true
+        case 2: return &VEC2_TYPE, true
+        case 3: return &VEC3_TYPE, true
+        case 4: return &VEC4_TYPE, true
+        case: panic("Unreachable")
+    }
 }
