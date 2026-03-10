@@ -684,9 +684,10 @@ parse_statement :: proc(using p: ^Parser) -> ^Ast_Statement
         {
             node = parse_assign(p)
         }
-        else if optional_token(p, .Return)
+        else if tokens[at].type == .Return
         {
             ret_stmt := make_statement(p, Ast_Return)
+            at += 1
             ret_stmt.expr = parse_expr(p)
             node = ret_stmt
         }

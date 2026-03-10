@@ -96,7 +96,7 @@ typecheck_ast :: proc(ast: ^Ast, file: File, allocator: runtime.Allocator) -> bo
             typecheck_statement(&c, stmt)
         }
 
-        if c.proc_ret != nil && proc_def.decl.type.ret.kind == .None {
+        if c.proc_ret != nil && c.proc_ret.expr != nil && proc_def.decl.type.ret.kind == .None {
             typecheck_error(&c, c.proc_ret.token, "Unexpected return, procedure does not have a return type.")
         } else if c.proc_ret == nil && proc_def.decl.type.ret.kind != .None {
             typecheck_error(&c, proc_def.decl.token, "Missing return statement.")
@@ -127,7 +127,9 @@ typecheck_statement :: proc(using c: ^Checker, statement: ^Ast_Statement)
         case ^Ast_Assign:
         {
             typecheck_expr(c, stmt.lhs)
+            if stmt.lhs.type.kind == .Poison do break
             typecheck_expr(c, stmt.rhs)
+            if stmt.rhs.type.kind == .Poison do break
 
             if !type_implicit_convert(stmt.rhs.type, stmt.lhs.type) {
                 typecheck_error_mismatching_types(c, stmt.token, stmt.lhs.type, stmt.rhs.type)
@@ -163,6 +165,7 @@ typecheck_statement :: proc(using c: ^Checker, statement: ^Ast_Statement)
         case ^Ast_If:
         {
             typecheck_expr(c, stmt.cond)
+
             if !type_implicit_convert(stmt.cond.type, &BOOL_TYPE) {
                 typecheck_error_mismatching_types(c, stmt.token, stmt.cond.type, &BOOL_TYPE)
             }
@@ -215,9 +218,21 @@ typecheck_statement :: proc(using c: ^Checker, statement: ^Ast_Statement)
         {
             c.proc_ret = stmt
 
-            typecheck_expr(c, stmt.expr)
-            if !type_implicit_convert(stmt.expr.type, cur_proc.decl.type.ret) {
-                typecheck_error_mismatching_types(c, stmt.token, stmt.expr.type, cur_proc.decl.type.ret)
+            if stmt.expr != nil
+            {
+                typecheck_expr(c, stmt.expr)
+                if stmt.expr.type.kind == .Poison do break
+
+                if !type_implicit_convert(stmt.expr.type, cur_proc.decl.type.ret) {
+                    typecheck_error_mismatching_types(c, stmt.token, stmt.expr.type, cur_proc.decl.type.ret)
+                }
+            }
+            else
+            {
+                if cur_proc.decl.type.ret.kind != .None {
+                    scratch, _ := acquire_scratch()
+                    typecheck_error(c, stmt.token, "Procedure has '%v' return type, nothing is being returned here.", type_to_string(cur_proc.decl.type.ret, scratch))
+                }
             }
         }
     }
@@ -242,8 +257,9 @@ typecheck_expr :: proc(using c: ^Checker, expression: ^Ast_Expr)
             typecheck_expr(c, expr.lhs)
             typecheck_expr(c, expr.rhs)
 
-            expr.type = bin_op_result_type(expr.op, expr.lhs.type, expr.rhs.type)
-            if expr.type == &POISON_TYPE {
+            ok: bool
+            expr.type, ok = bin_op_result_type(expr.op, expr.lhs.type, expr.rhs.type)
+            if !ok {
                 typecheck_error_mismatching_types(c, expr.token, expr.lhs.type, expr.rhs.type)
             }
         }
@@ -251,8 +267,9 @@ typecheck_expr :: proc(using c: ^Checker, expression: ^Ast_Expr)
         {
             typecheck_expr(c, expr.expr)
 
-            expr.type = unary_op_result_type(expr.op, expr.expr.type)
-            if expr.type == &POISON_TYPE {
+            ok: bool
+            expr.type, ok = unary_op_result_type(expr.op, expr.expr.type)
+            if !ok {
                 typecheck_error(c, expr.token, "Can't apply operator '%v' on type '%v'.", expr.token.text, type_to_string(expr.expr.type, arena = scratch))
             }
         }
@@ -283,12 +300,16 @@ typecheck_expr :: proc(using c: ^Checker, expression: ^Ast_Expr)
         case ^Ast_If_Expr:
         {
             typecheck_expr(c, expr.cond_expr)
+            if expr.cond_expr.type.kind == .Poison do break
+
             if !type_implicit_convert(expr.cond_expr.type, &BOOL_TYPE) {
                 typecheck_error_mismatching_types(c, expr.token, expr.cond_expr.type, &BOOL_TYPE)
             }
 
             typecheck_expr(c, expr.then_expr)
             typecheck_expr(c, expr.else_expr)
+            if expr.then_expr.type.kind == .Poison do break
+            if expr.else_expr.type.kind == .Poison do break
             expr.type = if_expr_result_type(expr.then_expr.type, expr.else_expr.type)
             if expr.type == &POISON_TYPE {
                 typecheck_error(c, expr.token, "Types for then and else expressions are incompatible: '%v' and '%v'.", type_to_string(expr.then_expr.type, arena = scratch), type_to_string(expr.else_expr.type, arena = scratch))
@@ -297,6 +318,7 @@ typecheck_expr :: proc(using c: ^Checker, expression: ^Ast_Expr)
         case ^Ast_Cast:
         {
             typecheck_expr(c, expr.expr)
+            if expr.expr.type.kind == .Poison do break
 
             if !type_cast_allowed(expr.expr.type, expr.cast_to) {
                 typecheck_error(c, expr.token, "Cast not allowed for these types: from '%v' to '%v'.", type_to_string(expr.expr.type, arena = scratch), type_to_string(expr.cast_to, arena = scratch))
@@ -306,6 +328,7 @@ typecheck_expr :: proc(using c: ^Checker, expression: ^Ast_Expr)
         case ^Ast_Member_Access:
         {
             typecheck_expr(c, expr.target)
+            if expr.target.type.kind == .Poison do break
 
             if expr.member_name == "xyz"
             {
@@ -339,6 +362,8 @@ typecheck_expr :: proc(using c: ^Checker, expression: ^Ast_Expr)
             }
 
             base := type_get_base(expr.target.type)
+            if base.kind == .Poison do break
+
             if base.kind != .Struct {
                 typecheck_error(c, expr.token, "Can't access members on this type.")
             }
@@ -363,6 +388,8 @@ typecheck_expr :: proc(using c: ^Checker, expression: ^Ast_Expr)
         {
             typecheck_expr(c, expr.target)
             typecheck_expr(c, expr.idx_expr)
+            if expr.target.type.kind == .Poison do break
+            if expr.idx_expr.type.kind == .Poison do break
 
             if expr.target.type.kind != .Slice {
                 typecheck_error(c, expr.token, "Can't access array element of this type, it must be a slice.")
@@ -375,6 +402,7 @@ typecheck_expr :: proc(using c: ^Checker, expression: ^Ast_Expr)
         {
             for arg in expr.args {
                 typecheck_expr(c, arg)
+                if arg.type.kind == .Poison do break expr_switch
             }
 
             // Handle intrinsics
@@ -432,6 +460,8 @@ typecheck_expr :: proc(using c: ^Checker, expression: ^Ast_Expr)
             // Regular procedure calls
 
             typecheck_expr(c, expr.target)
+            if expr.target.type.kind == .Poison do break
+
             if expr.target.type.kind != .Proc {
                 typecheck_error(c, expr.token, "Can't call this type, must be a procedure.")
             }
@@ -444,8 +474,6 @@ typecheck_expr :: proc(using c: ^Checker, expression: ^Ast_Expr)
             for arg, i in expr.args
             {
                 proc_decl_arg_type := expr.target.type.args[i].type
-
-                typecheck_expr(c, arg)
 
                 if !type_implicit_convert(arg.type, proc_decl_arg_type) {
                     typecheck_error_mismatching_types(c, arg.token, arg.type, proc_decl_arg_type)
@@ -533,6 +561,8 @@ resolve_type :: proc(using c: ^Checker, type: ^Ast_Type)
         type_decl := decl_lookup(c, base.name)
         if type_decl == nil {
             typecheck_error(c, base.name, "Undeclared identifier '%v'.", base.name.text)
+            base.kind = .Poison  // Turn the declaration into the poison type
+            base.primitive_kind = {}
         } else {
             base.base = type_decl.type
         }
@@ -541,16 +571,12 @@ resolve_type :: proc(using c: ^Checker, type: ^Ast_Type)
 
 typecheck_error :: proc(using c: ^Checker, token: Token, fmt_str: string, args: ..any)
 {
-    if error do return
-
     error_msg(file, token, fmt_str, ..args)
     error = true
 }
 
 typecheck_error_mismatching_types :: proc(using c: ^Checker, token: Token, type1: ^Ast_Type, type2: ^Ast_Type)
 {
-    if error do return
-
     scratch, _ := acquire_scratch()
     type1_str := type_to_string(type1, arena = scratch)
     type2_str := type_to_string(type2, arena = scratch)
@@ -560,8 +586,6 @@ typecheck_error_mismatching_types :: proc(using c: ^Checker, token: Token, type1
 
 typecheck_error_redeclaration :: proc(using c: ^Checker, decl_before: ^Ast_Decl, decl_after: ^Ast_Decl)
 {
-    if error do return
-
     error_msg(file, decl_after.token, "Redeclaration of '%v' in this scope.", decl_after.name)
     error = true
 }
@@ -590,7 +614,12 @@ add_intrinsics :: proc()
 
     // Constructors
     add_intrinsic("uint", { &FLOAT_TYPE }, { "x" }, &UINT_TYPE)
+    add_intrinsic("uint", { &UINT_TYPE }, { "x" }, &UINT_TYPE)
+    add_intrinsic("uint", { &INT_TYPE }, { "x" }, &UINT_TYPE)
     add_intrinsic("int", { &FLOAT_TYPE }, { "x" }, &INT_TYPE)
+    add_intrinsic("int", { &UINT_TYPE }, { "x" }, &INT_TYPE)
+    add_intrinsic("int", { &INT_TYPE }, { "x" }, &INT_TYPE)
+    add_intrinsic("float", { &FLOAT_TYPE }, { "x" }, &FLOAT_TYPE)
     add_intrinsic("float", { &INT_TYPE }, { "x" }, &FLOAT_TYPE)
     add_intrinsic("float", { &UINT_TYPE }, { "x" }, &FLOAT_TYPE)
     add_intrinsic("float", { &BOOL_TYPE }, { "x" }, &FLOAT_TYPE)
@@ -751,16 +780,20 @@ add_intrinsic_struct :: proc(name: string, members: []^Ast_Type, names: []string
     return label_type
 }
 
-// Returns &POISON_TYPE if the two types are not allowed
-bin_op_result_type :: proc(op: Ast_Binary_Op, type1: ^Ast_Type, type2: ^Ast_Type) -> ^Ast_Type
+// Propagates &POISON_TYPE
+bin_op_result_type :: proc(op: Ast_Binary_Op, type1: ^Ast_Type, type2: ^Ast_Type) -> (res: ^Ast_Type, ok: bool)
 {
+    if type1.kind == .Poison || type2.kind == .Poison {
+        return &POISON_TYPE, true
+    }
+
     if op == .Mul && type1.primitive_kind == .Mat4
     {
-        if type2.primitive_kind == .Vec4 do return &VEC4_TYPE
+        if type2.primitive_kind == .Vec4 do return &VEC4_TYPE, true
     }
     else if op == .Mul && type1.primitive_kind == .Vec4
     {
-        if type2.primitive_kind == .Mat4 do return &VEC4_TYPE
+        if type2.primitive_kind == .Mat4 do return &VEC4_TYPE, true
     }
 
     is_bit_manip := op == .Bitwise_And ||
@@ -770,9 +803,9 @@ bin_op_result_type :: proc(op: Ast_Binary_Op, type1: ^Ast_Type, type2: ^Ast_Type
                   op == .RShift
     if is_bit_manip
     {
-        if type_implicit_convert(type1, &UINT_TYPE) && type_implicit_convert(type2, &UINT_TYPE) do return &UINT_TYPE
-        if type_implicit_convert(type1, &INT_TYPE) && type_implicit_convert(type2, &INT_TYPE) do return &INT_TYPE
-        return &POISON_TYPE
+        if type_implicit_convert(type1, &UINT_TYPE) && type_implicit_convert(type2, &UINT_TYPE) do return &UINT_TYPE, true
+        if type_implicit_convert(type1, &INT_TYPE) && type_implicit_convert(type2, &INT_TYPE) do return &INT_TYPE, true
+        return &POISON_TYPE, false
     }
 
     is_compare := op == .Greater ||
@@ -783,8 +816,8 @@ bin_op_result_type :: proc(op: Ast_Binary_Op, type1: ^Ast_Type, type2: ^Ast_Type
                   op == .NEQ
     if is_compare
     {
-        if type_implicit_convert(type1, type2) || type_implicit_convert(type2, type1) do return &BOOL_TYPE
-        else do return &POISON_TYPE
+        if type_implicit_convert(type1, type2) || type_implicit_convert(type2, type1) do return &BOOL_TYPE, true
+        else do return &POISON_TYPE, false
     }
 
     // Commutative properties here.
@@ -794,46 +827,48 @@ bin_op_result_type :: proc(op: Ast_Binary_Op, type1: ^Ast_Type, type2: ^Ast_Type
         t2 := type2 if i == 0 else type1
 
         if (t1.primitive_kind == .Untyped_Float || t1.primitive_kind == .Untyped_Int) && t2.primitive_kind == .Float {
-            return t2
+            return t2, true
         }
         if t1.primitive_kind == .Untyped_Int && (t2.primitive_kind == .Uint || t2.primitive_kind == .Int) {
-            return t2
+            return t2, true
         }
         if type_implicit_convert(t1, &FLOAT_TYPE) && t2.primitive_kind == .Vec2 {
-            return t2
+            return t2, true
         }
         if type_implicit_convert(t1, &FLOAT_TYPE) && t2.primitive_kind == .Vec3 {
-            return t2
+            return t2, true
         }
         if type_implicit_convert(t1, &FLOAT_TYPE) && t2.primitive_kind == .Vec4 {
-            return t2
+            return t2, true
         }
     }
 
-    if same_type(type1, type2) do return type1
-    return &POISON_TYPE
+    if same_type(type1, type2) do return type1, true
+    return &POISON_TYPE, false
 }
 
-unary_op_result_type :: proc(op: Ast_Unary_Op, type: ^Ast_Type) -> ^Ast_Type
+unary_op_result_type :: proc(op: Ast_Unary_Op, type: ^Ast_Type) -> (res: ^Ast_Type, ok: bool)
 {
+    if type.kind == .Poison do return &POISON_TYPE, true
+
     is_boolean := op == .Not
     if is_boolean
     {
-        if type_implicit_convert(type, &BOOL_TYPE) do return &BOOL_TYPE
+        if type_implicit_convert(type, &BOOL_TYPE) do return &BOOL_TYPE, true
     }
 
     is_arithmetic := op == .Minus || op == .Plus
     if is_arithmetic
     {
-        if type_implicit_convert(type, &INT_TYPE) do return &INT_TYPE
-        if type_implicit_convert(type, &UINT_TYPE) do return &UINT_TYPE
-        if type_implicit_convert(type, &FLOAT_TYPE) do return &FLOAT_TYPE
-        if type_implicit_convert(type, &VEC2_TYPE) do return &VEC2_TYPE
-        if type_implicit_convert(type, &VEC3_TYPE) do return &VEC3_TYPE
-        if type_implicit_convert(type, &VEC4_TYPE) do return &VEC4_TYPE
+        if type_implicit_convert(type, &INT_TYPE) do return &INT_TYPE, true
+        if type_implicit_convert(type, &UINT_TYPE) do return &UINT_TYPE, true
+        if type_implicit_convert(type, &FLOAT_TYPE) do return &FLOAT_TYPE, true
+        if type_implicit_convert(type, &VEC2_TYPE) do return &VEC2_TYPE, true
+        if type_implicit_convert(type, &VEC3_TYPE) do return &VEC3_TYPE, true
+        if type_implicit_convert(type, &VEC4_TYPE) do return &VEC4_TYPE, true
     }
 
-    return &POISON_TYPE
+    return &POISON_TYPE, false
 }
 
 // Returns &POISON_TYPE if the two types are not allowed

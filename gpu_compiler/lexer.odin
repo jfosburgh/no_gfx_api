@@ -361,19 +361,15 @@ error_msg :: proc(file: File, token: Token, fmt_str: string, args: ..any)
         offset_begin -= 1
     }
     // Go to first non blank char
-    whitespace_count := u32(0)
+    whitespace_count := 0
     for
     {
-        if offset_begin >= u32(len(file.content)) {
+        if offset_begin >= u32(len(file.content)) || !is_whitespace(file.content[offset_begin]) {
             break
         }
 
         offset_begin += 1
         whitespace_count += 1
-
-        if !is_whitespace(file.content[offset_begin]) {
-            break
-        }
     }
 
     offset_end := token.offset
@@ -392,7 +388,7 @@ error_msg :: proc(file: File, token: Token, fmt_str: string, args: ..any)
     // Print token underline
     {
         fmt.print("    ")
-        for _ in 0..<token.col_start-whitespace_count {
+        for _ in 0..<int(token.col_start)-whitespace_count {
             fmt.print(" ")
         }
 
