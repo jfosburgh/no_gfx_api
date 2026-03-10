@@ -455,7 +455,9 @@ codegen_statement :: proc(statement: ^Ast_Statement, insert_semi := true)
             else
             {
                 write("return ")
-                codegen_expr(stmt.expr)
+                if stmt.expr != nil {
+                    codegen_expr(stmt.expr)
+                }
                 write(";")
             }
         }

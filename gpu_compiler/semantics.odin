@@ -96,9 +96,7 @@ typecheck_ast :: proc(ast: ^Ast, file: File, allocator: runtime.Allocator) -> bo
             typecheck_statement(&c, stmt)
         }
 
-        if c.proc_ret != nil && c.proc_ret.expr != nil && proc_def.decl.type.ret.kind == .None {
-            typecheck_error(&c, c.proc_ret.token, "Unexpected return, procedure does not have a return type.")
-        } else if c.proc_ret == nil && proc_def.decl.type.ret.kind != .None {
+        if c.proc_ret == nil && proc_def.decl.type.ret.kind != .None {
             typecheck_error(&c, proc_def.decl.token, "Missing return statement.")
         }
     }
