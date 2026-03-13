@@ -2397,6 +2397,8 @@ _cmd_set_shaders :: proc(cmd_buf: Command_Buffer, vert_shader: Shader, frag_shad
     {
         ok := true
         ok &= pool_check(&ctx.command_buffers, cmd_buf, "cmd_buf", loc)
+        ok &= pool_check(&ctx.shaders, vert_shader, "vert_shader", loc)
+        ok &= pool_check(&ctx.shaders, frag_shader, "frag_shader", loc)
         if !ok do return
     }
 
@@ -2514,6 +2516,7 @@ _cmd_set_compute_shader :: proc(cmd_buf: Command_Buffer, compute_shader: Shader,
     {
         ok := true
         ok &= pool_check(&ctx.command_buffers, cmd_buf, "cmd_buf", loc)
+        ok &= pool_check(&ctx.shaders, compute_shader, "compute_shader", loc)
         if !ok do return
     }
 
