@@ -2488,6 +2488,10 @@ _cmd_set_viewport :: proc(cmd_buf: Command_Buffer, viewport: Viewport, loc := #c
     {
         ok := true
         ok &= pool_check(&ctx.command_buffers, cmd_buf, "cmd_buf", loc)
+        if viewport.size.x <= 0 || viewport.size.y <= 0 {
+            log.error("Viewport width and height must be > 0.", location = loc)
+            ok = false
+        }
         if !ok do return
     }
 
