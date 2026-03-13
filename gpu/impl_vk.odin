@@ -2435,6 +2435,23 @@ _cmd_set_depth_state :: proc(cmd_buf: Command_Buffer, state: Depth_State, loc :=
     vk.CmdSetStencilTestEnable(vk_cmd_buf, false)
 }
 
+_cmd_set_raster_state :: proc(cmd_buf: Command_Buffer, state: Raster_State, loc := #caller_location)
+{
+    if ctx.validation
+    {
+        ok := true
+        ok &= pool_check(&ctx.command_buffers, cmd_buf, "cmd_buf", loc)
+        if !ok do return
+    }
+
+    cmd_buf := pool_get(&ctx.command_buffers, cmd_buf)
+    vk_cmd_buf := cmd_buf.handle
+
+    vk.CmdSetPrimitiveTopology(vk_cmd_buf, to_vk_topology(state.topology))
+    vk.CmdSetCullMode(vk_cmd_buf, to_vk_cull_mode(state.cull_mode))
+    vk.CmdSetAlphaToCoverageEnableEXT(vk_cmd_buf, b32(state.alpha_to_coverage))
+}
+
 _cmd_set_blend_state :: proc(cmd_buf: Command_Buffer, state: Blend_State, loc := #caller_location)
 {
     if ctx.validation
@@ -2638,6 +2655,13 @@ _cmd_begin_render_pass :: proc(cmd_buf: Command_Buffer, desc: Render_Pass_Desc, 
         vk.CmdSetColorWriteMaskEXT(vk_cmd_buf, 0, color_attachment_count, raw_data(color_masks))
     }
 
+    // Raster state
+    vk.CmdSetRasterizationSamplesEXT(vk_cmd_buf, { ._1 })
+    vk.CmdSetPrimitiveTopology(vk_cmd_buf, .TRIANGLE_LIST)
+    vk.CmdSetPolygonModeEXT(vk_cmd_buf, .FILL)
+    vk.CmdSetCullMode(vk_cmd_buf, { .BACK })
+    vk.CmdSetFrontFace(vk_cmd_buf, .COUNTER_CLOCKWISE)
+
     // Depth state
     vk.CmdSetDepthCompareOp(vk_cmd_buf, .LESS)
     vk.CmdSetDepthTestEnable(vk_cmd_buf, false)
@@ -2665,16 +2689,11 @@ _cmd_begin_render_pass :: proc(cmd_buf: Command_Buffer, desc: Render_Pass_Desc, 
 
     // Unused
     vk.CmdSetVertexInputEXT(vk_cmd_buf, 0, nil, 0, nil)
-    vk.CmdSetRasterizationSamplesEXT(vk_cmd_buf, { ._1 })
-    vk.CmdSetPrimitiveTopology(vk_cmd_buf, .TRIANGLE_LIST)
     vk.CmdSetPrimitiveRestartEnable(vk_cmd_buf, false)
 
     sample_mask := vk.SampleMask(1)
     vk.CmdSetSampleMaskEXT(vk_cmd_buf, { ._1 }, &sample_mask)
     vk.CmdSetAlphaToCoverageEnableEXT(vk_cmd_buf, false)
-    vk.CmdSetPolygonModeEXT(vk_cmd_buf, .FILL)
-    vk.CmdSetCullMode(vk_cmd_buf, { .BACK })
-    vk.CmdSetFrontFace(vk_cmd_buf, .COUNTER_CLOCKWISE)
 }
 
 _cmd_end_render_pass :: proc(cmd_buf: Command_Buffer, loc := #caller_location)

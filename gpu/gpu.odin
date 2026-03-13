@@ -60,6 +60,8 @@ Store_Op :: enum { Store = 0, Dont_Care }
 Compare_Op :: enum { Never = 0, Less, Equal, Less_Equal, Greater, Not_Equal, Greater_Equal, Always }
 Blend_Op :: enum { Add, Subtract, Rev_Subtract, Min, Max }
 Blend_Factor :: enum { Zero, One, Src_Color, Dst_Color, Src_Alpha }
+Topology :: enum { Triangle_List = 0, Triangle_Strip, Triangle_Fan };
+Cull_Mode :: enum { Cull_CW = 0, Cull_CCW, None, All };
 Depth_Mode :: enum { Read = 0, Write }
 Depth_Flags :: bit_set[Depth_Mode; u32]
 Hazard :: enum { Draw_Arguments = 0, Descriptors, Depth_Stencil, BVHs }
@@ -169,6 +171,13 @@ Texture :: struct #all_or_none
     format: Texture_Format,
     mip_count: u32,
     handle: Texture_Handle
+}
+
+Raster_State :: struct
+{
+    topology: Topology,
+    cull_mode: Cull_Mode,
+    alpha_to_coverage: bool,
 }
 
 Depth_State :: struct
@@ -343,6 +352,7 @@ cmd_barrier: proc(cmd_buf: Command_Buffer, before: Stage, after: Stage, hazards:
 cmd_set_shaders: proc(cmd_buf: Command_Buffer, vert_shader: Shader, frag_shader: Shader, loc := #caller_location) : _cmd_set_shaders
 cmd_set_compute_shader: proc(cmd_buf: Command_Buffer, compute_shader: Shader, loc := #caller_location) : _cmd_set_compute_shader
 cmd_set_depth_state: proc(cmd_buf: Command_Buffer, state: Depth_State, loc := #caller_location) : _cmd_set_depth_state
+cmd_set_raster_state: proc(cmd_buf: Command_Buffer, state: Raster_State, loc := #caller_location) : _cmd_set_raster_state
 cmd_set_blend_state: proc(cmd_buf: Command_Buffer, state: Blend_State, loc := #caller_location) : _cmd_set_blend_state
 cmd_set_viewport: proc(cmd_buf: Command_Buffer, viewport: Viewport, loc := #caller_location) : _cmd_set_viewport
 cmd_set_scissor: proc(cmd_buf: Command_Buffer, scissor: Rect_2D, loc := #caller_location) : _cmd_set_scissor

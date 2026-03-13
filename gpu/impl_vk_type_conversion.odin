@@ -317,3 +317,27 @@ to_vk_rect_2D :: proc(rect: Rect_2D) -> vk.Rect2D
         extent = { rect.size.x, rect.size.y },
     }
 }
+
+to_vk_topology :: #force_inline proc(topology: Topology) -> vk.PrimitiveTopology
+{
+    switch topology
+    {
+        case .Triangle_List:  return .TRIANGLE_LIST
+        case .Triangle_Strip: return .TRIANGLE_STRIP
+        case .Triangle_Fan:   return .TRIANGLE_FAN
+    }
+    return {}
+}
+
+to_vk_cull_mode :: #force_inline proc(cull_mode: Cull_Mode) -> vk.CullModeFlags
+{
+    // IMPORTANT NOTE: Assuming that CCW is front!
+    switch cull_mode
+    {
+        case .Cull_CW:  return { .BACK }
+        case .Cull_CCW: return { .FRONT }
+        case .None:     return {}
+        case .All:      return { .FRONT, .BACK }
+    }
+    return {}
+}
