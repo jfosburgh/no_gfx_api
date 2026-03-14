@@ -2475,7 +2475,7 @@ _cmd_set_blend_state :: proc(cmd_buf: Command_Buffer, state: Blend_State, loc :=
         alphaBlendOp        = to_vk_blend_op(state.alpha_op),
     })
 
-    color_write_mask := transmute(vk.ColorComponentFlags) cast(u32) state.color_write_mask
+    color_write_mask := transmute(vk.ColorComponentFlags) cast(u32) transmute(u8) state.color_write_mask
     vk.CmdSetColorWriteMaskEXT(vk_cmd_buf, 0, 1, &color_write_mask)
 }
 

@@ -69,6 +69,7 @@ Hazard_Flags :: bit_set[Hazard; u32]
 Stage :: enum { Transfer = 0, Compute, Raster_Color_Out, Fragment_Shader, Vertex_Shader, Build_BVH, All }
 Color_Component_Flag :: enum { R = 0, G = 1, B = 2, A = 3 }
 Color_Component_Flags :: distinct bit_set[Color_Component_Flag; u8]
+Color_Components_All :: Color_Component_Flags { .R, .G, .B, .A }
 Filter :: enum { Linear = 0, Nearest }
 Address_Mode :: enum { Repeat = 0, Mirrored_Repeat, Clamp_To_Edge }
 BVH_Instance_Flag :: enum { Disable_Culling = 0, Flip_Facing = 1, Force_Opaque = 2, Force_Not_Opaque = 3 }
@@ -195,7 +196,7 @@ Blend_State :: struct
     alpha_op: Blend_Op,
     src_alpha_factor: Blend_Factor,
     dst_alpha_factor: Blend_Factor,
-    color_write_mask: u8,
+    color_write_mask: Color_Component_Flags,
 }
 
 Draw_Indexed_Indirect_Command :: struct
