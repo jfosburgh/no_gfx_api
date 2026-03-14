@@ -59,7 +59,7 @@ Load_Op :: enum { Clear = 0, Load, Dont_Care }
 Store_Op :: enum { Store = 0, Dont_Care }
 Compare_Op :: enum { Never = 0, Less, Equal, Less_Equal, Greater, Not_Equal, Greater_Equal, Always }
 Blend_Op :: enum { Add, Subtract, Rev_Subtract, Min, Max }
-Blend_Factor :: enum { Zero, One, Src_Color, Dst_Color, Src_Alpha }
+Blend_Factor :: enum { Zero, One, Src_Color, Dst_Color, Src_Alpha, Dst_Alpha, One_Minus_Src_Alpha, One_Minus_Src_Color, One_Minus_Dst_Alpha, One_Minus_Dst_Color }
 Topology :: enum { Triangle_List = 0, Triangle_Strip, Triangle_Fan };
 Cull_Mode :: enum { Cull_CW = 0, Cull_CCW, None, All };
 Depth_Mode :: enum { Read = 0, Write }

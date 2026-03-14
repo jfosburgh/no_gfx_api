@@ -282,6 +282,11 @@ to_vk_blend_factor :: proc(blend: Blend_Factor) -> vk.BlendFactor
         case .Src_Color: return .SRC_COLOR
         case .Dst_Color: return .DST_COLOR
         case .Src_Alpha: return .SRC_ALPHA
+        case .Dst_Alpha: return .DST_ALPHA
+        case .One_Minus_Src_Alpha: return .ONE_MINUS_SRC_ALPHA
+        case .One_Minus_Src_Color: return .ONE_MINUS_SRC_COLOR
+        case .One_Minus_Dst_Alpha: return .ONE_MINUS_DST_ALPHA
+        case .One_Minus_Dst_Color: return .ONE_MINUS_DST_COLOR
     }
     return {}
 }
