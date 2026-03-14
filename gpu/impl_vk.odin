@@ -1256,10 +1256,7 @@ _mem_alloc_raw :: proc(#any_int el_size, #any_int el_count, #any_int align: i64,
     {
         case .Default:
         {
-            buf_usage = { .SHADER_DEVICE_ADDRESS, .STORAGE_BUFFER, .TRANSFER_SRC, .TRANSFER_DST, .INDIRECT_BUFFER }
-            if mem_type == .GPU {
-                buf_usage += { .INDEX_BUFFER }
-            }
+            buf_usage = { .SHADER_DEVICE_ADDRESS, .STORAGE_BUFFER, .INDEX_BUFFER, .TRANSFER_SRC, .TRANSFER_DST, .INDIRECT_BUFFER }
             if .Raytracing in ctx.features {
                 buf_usage += { .ACCELERATION_STRUCTURE_STORAGE_KHR, .ACCELERATION_STRUCTURE_BUILD_INPUT_READ_ONLY_KHR }
             }
