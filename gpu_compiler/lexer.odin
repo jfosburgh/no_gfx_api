@@ -131,8 +131,8 @@ Two_Char_Operators := map[string]Token_Type {
     "->" = .Arrow,
     "&&" = .And,
     "||" = .Or,
-    ">>" = .LShift,
-    "<<" = .RShift,
+    "<<" = .LShift,
+    ">>" = .RShift,
 }
 
 Token :: struct
