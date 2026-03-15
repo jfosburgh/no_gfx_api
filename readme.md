@@ -88,7 +88,7 @@ for true
         // Uniforms...
     }
     verts_data := gpu.arena_alloc(frame_arena, Vert_Data)
-    verts_data.cpu.verts = verts_local
+    verts_data.cpu.verts = verts_local.gpu.ptr
 
     // Just pass pointers to your data!
     gpu.cmd_draw_indexed_instanced(cmd_buf, verts_data, {}, indices_local, 3, 1)
