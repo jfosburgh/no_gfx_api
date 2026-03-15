@@ -602,10 +602,10 @@ texture_alloc_and_create :: proc(desc: Texture_Desc, queue: Queue = nil, signal_
     return Owned_Texture { texture, ptr.gpu }
 }
 
-texture_free_and_destroy :: proc(texture: ^Owned_Texture)
+texture_free_and_destroy :: proc(texture: ^Owned_Texture, loc := #caller_location)
 {
-    texture_destroy(texture)
-    mem_free_raw(texture.mem)
+    texture_destroy(texture, loc = loc)
+    mem_free_raw(texture.mem, loc = loc)
     texture^ = {}
 }
 
@@ -615,40 +615,40 @@ Owned_BVH :: struct
     mem: gpuptr,
 }
 
-blas_alloc_and_create :: proc(desc: BLAS_Desc) -> Owned_BVH
+blas_alloc_and_create :: proc(desc: BLAS_Desc, loc := #caller_location) -> Owned_BVH
 {
-    size, align := bvh_size_and_align(desc)
-    ptr := mem_alloc_raw(size, 1, align, .GPU)
-    bvh := bvh_create(desc, ptr)
+    size, align := bvh_size_and_align(desc, loc = loc)
+    ptr := mem_alloc_raw(size, 1, align, .GPU, loc = loc)
+    bvh := bvh_create(desc, ptr, loc = loc)
     return Owned_BVH { bvh, ptr }
 }
 
-tlas_alloc_and_create :: proc(desc: TLAS_Desc) -> Owned_BVH
+tlas_alloc_and_create :: proc(desc: TLAS_Desc, loc := #caller_location) -> Owned_BVH
 {
-    size, align := bvh_size_and_align(desc)
-    ptr := mem_alloc_raw(size, 1, align, .GPU)
-    bvh := bvh_create(desc, ptr)
+    size, align := bvh_size_and_align(desc, loc = loc)
+    ptr := mem_alloc_raw(size, 1, align, .GPU, loc = loc)
+    bvh := bvh_create(desc, ptr, loc = loc)
     return Owned_BVH { bvh, ptr }
 }
 
 bvh_alloc_and_create :: proc { blas_alloc_and_create, tlas_alloc_and_create }
 
-bvh_free_and_destroy :: proc(bvh: ^Owned_BVH)
+bvh_free_and_destroy :: proc(bvh: ^Owned_BVH, loc := #caller_location)
 {
-    bvh_destroy(bvh)
-    mem_free_raw(bvh.mem)
+    bvh_destroy(bvh, loc = loc)
+    mem_free_raw(bvh.mem, loc = loc)
     bvh^ = {}
 }
 
-blas_alloc_build_scratch_buffer :: proc(arena: ^Arena, desc: BLAS_Desc) -> ptr
+blas_alloc_build_scratch_buffer :: proc(arena: ^Arena, desc: BLAS_Desc, loc := #caller_location) -> ptr
 {
-    size, align := blas_build_scratch_buffer_size_and_align(desc)
+    size, align := blas_build_scratch_buffer_size_and_align(desc, loc = loc)
     return arena_alloc_raw(arena, size, 1, align)
 }
 
-tlas_alloc_build_scratch_buffer :: proc(arena: ^Arena, desc: TLAS_Desc) -> ptr
+tlas_alloc_build_scratch_buffer :: proc(arena: ^Arena, desc: TLAS_Desc, loc := #caller_location) -> ptr
 {
-    size, align := tlas_build_scratch_buffer_size_and_align(desc)
+    size, align := tlas_build_scratch_buffer_size_and_align(desc, loc = loc)
     return arena_alloc_raw(arena, size, 1, align)
 }
 
