@@ -569,7 +569,7 @@ typecheck_error_redeclaration :: proc(using c: ^Checker, decl_before: ^Ast_Decl,
 
 INTRINSICS: [dynamic]^Ast_Decl
 
-// TODO: These should all just be declared in a .musl file.
+// TODO: These should all just be declared in a .nosl file.
 add_intrinsics :: proc()
 {
     // Resource access

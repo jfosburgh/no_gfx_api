@@ -273,7 +273,7 @@ codegen_statement :: proc(statement: ^Ast_Statement, insert_semi := true)
         }
         case ^Ast_Assign:
         {
-            // NOTE: In musl we do rq := rayquery_init(...) but in GLSL we can't set the rayquery object.
+            // NOTE: In nosl we do rq := rayquery_init(...) but in GLSL we can't set the rayquery object.
             if stmt.lhs.type.primitive_kind == .Ray_Query
             {
                 call, is_call := stmt.rhs.derived_expr.(^Ast_Call)
@@ -308,7 +308,7 @@ codegen_statement :: proc(statement: ^Ast_Statement, insert_semi := true)
         {
             stmt.decl.glsl_name = ident_to_glsl(stmt.decl.name)
 
-            // NOTE: In .musl we do rq := rayquery_init(...) but in GLSL we can't set the rayquery object.
+            // NOTE: In .nosl we do rq := rayquery_init(...) but in GLSL we can't set the rayquery object.
             if stmt.decl.type.primitive_kind == .Ray_Query
             {
                 call, is_call := stmt.expr.derived_expr.(^Ast_Call)

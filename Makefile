@@ -63,7 +63,7 @@ build_slang:
 
 build_example:
 	make clean_example example=$(example)
-	make shaders_musl example=$(example)
+	make shaders_nosl example=$(example)
 	odin build examples/$(example) -debug "-out=build/$(subst /,_,$(example))$(exe_extension)"
 
 build_example_slang:
@@ -73,7 +73,7 @@ build_example_slang:
 
 run_example:
 	make clean_example example=$(example)
-	make shaders_musl example=$(example)
+	make shaders_nosl example=$(example)
 	odin run examples/$(example) -debug -keep-executable "-out=build/$(subst /,_,$(example))$(exe_extension)"
 
 run_example_slang:
@@ -103,17 +103,17 @@ build_imgui:
 
 # ==== Shaders ====
 
-shader_musl:
-	./build/gpu_compiler$(exe_extension) "$(shader).musl"
+shader_nosl:
+	./build/gpu_compiler$(exe_extension) "$(shader).nosl"
 	glslangValidator $(glsl_flags) -V "$(shader).glsl" -o "$(shader).spv"
 
-# Compiles MUSL shaders for one example via gpu_compiler + glslangValidator.
-shaders_musl: compiler
-	$(foreach shader,$(wildcard examples/$(example)/shaders/*.musl),make shader_musl shader=$(subst .musl,,$(shader));)
+# Compiles NOSL shaders for one example via gpu_compiler + glslangValidator.
+shaders_nosl: compiler
+	$(foreach shader,$(wildcard examples/$(example)/shaders/*.nosl),make shader_nosl shader=$(subst .nosl,,$(shader));)
 
-# Builds the MUSL shaders for all examples
-shaders_musl_all:
-	$(foreach example,$(examples),make shaders_musl example=$(example);)
+# Builds the NOSL shaders for all examples
+shaders_nosl_all:
+	$(foreach example,$(examples),make shaders_nosl example=$(example);)
 
 # Compiles Slang shaders for one example and validates SPIR-V output.
 shaders_slang:
@@ -122,17 +122,17 @@ shaders_slang:
 	for slang in "$$dir"/shaders/*.slang; do \
 		[ -e "$$slang" ] || continue; \
 		base="$${slang%.slang}"; \
-		if [ -f "$$base.vert.musl" ]; then \
+		if [ -f "$$base.vert.nosl" ]; then \
 			echo "Compiling $$slang to vertex shader"; \
 			slangc -target spirv -target glsl -fvk-use-scalar-layout -force-glsl-scalar-layout -validate-ir -no-mangle -entry vertexMain -stage vertex "$$slang" -o "$$base.vert.spv" -o "$$base.vert.glsl"; \
 			spirv-val "$$base.vert.spv" --relax-block-layout --scalar-block-layout --target-env vulkan1.3; \
 		fi; \
-		if [ -f "$$base.frag.musl" ]; then \
+		if [ -f "$$base.frag.nosl" ]; then \
 			echo "Compiling $$slang to fragment shader"; \
 			slangc -target spirv -target glsl -fvk-use-scalar-layout -force-glsl-scalar-layout -validate-ir -no-mangle -entry fragmentMain -stage fragment "$$slang" -o "$$base.frag.spv" -o "$$base.frag.glsl"; \
 			spirv-val "$$base.frag.spv" --relax-block-layout --scalar-block-layout --target-env vulkan1.3; \
 		fi; \
-		if [ -f "$$base.comp.musl" ]; then \
+		if [ -f "$$base.comp.nosl" ]; then \
 			echo "Compiling $$slang to compute shader"; \
 			slangc -target spirv -target glsl -fvk-use-scalar-layout -force-glsl-scalar-layout -validate-ir -no-mangle -entry computeMain -stage compute "$$slang" -o "$$base.comp.spv" -o "$$base.comp.glsl"; \
 			spirv-val "$$base.comp.spv" --relax-block-layout --scalar-block-layout --target-env vulkan1.3; \

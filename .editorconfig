@@ -15,7 +15,7 @@ insert_final_newline = false
 indent_size = 4
 
 
-[*.musl]
+[*.nosl]
 indent_size = 4
 
 [Makefile]

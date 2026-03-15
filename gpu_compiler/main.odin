@@ -15,7 +15,7 @@ main :: proc()
 {
     if len(os.args) != 2
     {
-        fmt.println("Incorrect Usage. Try: gpu_compiler *.musl")
+        fmt.println("Incorrect Usage. Try: gpu_compiler *.nosl")
         os.exit(1)
     }
 
@@ -45,7 +45,7 @@ main :: proc()
     } else if shader_type_str == ".comp" {
         shader_type = .Compute
     } else {
-        fmt.println("Could not infer shader type. Try '*.vert.musl', '*.frag.musl', or '*.comp.musl'.")
+        fmt.println("Could not infer shader type. Try '*.vert.nosl', '*.frag.nosl', or '*.comp.nosl'.")
         os.exit(1)
     }
 
