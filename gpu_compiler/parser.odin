@@ -1,6 +1,7 @@
 
 #+feature dynamic-literals
 #+feature using-stmt
+#+vet !unused-imports
 
 package main
 
@@ -8,6 +9,7 @@ import "base:runtime"
 import "core:slice"
 import intr "base:intrinsics"
 import str "core:strings"
+import "core:fmt"
 
 Lang_Feature :: enum { Raytracing }
 Lang_Features :: bit_set[Lang_Feature; u32]
@@ -233,6 +235,9 @@ Ast_Statement :: struct
 Ast_Assign :: struct
 {
     using base_statement: Ast_Statement,
+
+    apply_op: bool,
+    bin_op: Ast_Binary_Op,
     lhs: ^Ast_Expr,
     rhs: ^Ast_Expr
 }
@@ -677,9 +682,9 @@ parse_statement :: proc(using p: ^Parser) -> ^Ast_Statement
     else
     {
         cursor := at
-        for ; tokens[cursor].type != .Semi && tokens[cursor].type != .Assign && tokens[cursor].type != .EOS; cursor += 1 { }
+        for ; tokens[cursor].type != .Semi && !is_token_type_assign(tokens[cursor].type) && tokens[cursor].type != .EOS; cursor += 1 { }
 
-        found_assign := tokens[cursor].type == .Assign
+        found_assign := is_token_type_assign(tokens[cursor].type)
         if found_assign
         {
             node = parse_assign(p)
@@ -708,7 +713,24 @@ parse_assign :: proc(using p: ^Parser) -> ^Ast_Assign
 {
     node := make_statement(p, Ast_Assign)
     node.lhs = parse_expr(p)
-    required_token(p, .Assign)
+    node.token = tokens[at]
+    #partial switch tokens[at].type
+    {
+        case .Plus_Equals, .Minus_Equals, .Mul_Equals, .Div_Equals, .Assign:
+        {
+            if tokens[at].type != .Assign do node.apply_op = true
+            #partial switch tokens[at].type
+            {
+                case .Plus_Equals:  node.bin_op = .Add
+                case .Minus_Equals: node.bin_op = .Minus
+                case .Mul_Equals:   node.bin_op = .Mul
+                case .Div_Equals:   node.bin_op = .Div
+            }
+        }
+        case: parse_error(p, "Unexpected token '%v': expecting assignment", tokens[at].text)
+    }
+    at += 1
+
     node.rhs = parse_expr(p)
     return node
 }

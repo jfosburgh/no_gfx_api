@@ -300,7 +300,7 @@ codegen_statement :: proc(statement: ^Ast_Statement, insert_semi := true)
             }
 
             codegen_expr(stmt.lhs)
-            write(" = ")
+            writef(" %v ", stmt.token.text)
             codegen_expr(stmt.rhs)
             if insert_semi do write(";")
         }

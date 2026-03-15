@@ -129,6 +129,17 @@ typecheck_statement :: proc(using c: ^Checker, statement: ^Ast_Statement)
             typecheck_expr(c, stmt.rhs)
             if stmt.rhs.type.kind == .Poison do break
 
+            if stmt.apply_op
+            {
+                bin_op_type, ok := bin_op_result_type(stmt.bin_op, stmt.lhs.type, stmt.rhs.type)
+                if !ok {
+                    typecheck_error_mismatching_types(c, stmt.token, stmt.lhs.type, stmt.rhs.type)
+                    break
+                } else {
+                    stmt.rhs.type = bin_op_type
+                }
+            }
+
             if !type_implicit_convert(stmt.rhs.type, stmt.lhs.type) {
                 typecheck_error_mismatching_types(c, stmt.token, stmt.lhs.type, stmt.rhs.type)
             }

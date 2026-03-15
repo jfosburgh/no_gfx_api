@@ -34,8 +34,8 @@ main :: (data: ^Data @data, global_invocation_id: vec3 @global_invocation_id)
     uv := global_invocation_id.xy / data.resolution;
     coord := 2.0 * uv - 1.0;
 
-    coord = coord * tan((90.0 * pi / 180.0) / 2.0);
-    coord.y = coord.y * data.resolution.y / data.resolution.x;
+    coord *= tan((90.0 * pi / 180.0) / 2.0);
+    coord.y *= data.resolution.y / data.resolution.x;
 
     world_camera_pos := (data.camera_to_world * vec4(0, 0, 0, 1)).xyz;
     camera_lookat := normalize(vec3(coord, 1));
@@ -69,7 +69,7 @@ pathtrace :: (start_ray: Ray, tlas_id: bvh_id, scene: Scene) -> vec3
     albedo_color := vec3(0.8, 0.8, 0.8);
 
     max_bounces := 5;
-    for bounce := 0; bounce <= max_bounces; bounce = bounce + 1
+    for bounce := 0; bounce <= max_bounces; bounce += 1
     {
         hit := ray_scene_intersection(ray, tlas_id, scene);
         if !hit.hit
@@ -77,12 +77,12 @@ pathtrace :: (start_ray: Ray, tlas_id: bvh_id, scene: Scene) -> vec3
             // Simple gradient environment map.
             coords := vec2(atan(ray.dir.x, ray.dir.z) / (2.0 * 3.1415), acos(clamp(ray.dir.y, -1.0, 1.0)) / 3.1415);
             emission := mix(vec3(0.8, 0.7, 0.1), vec3(0.1, 0.2, 0.8), vec3(coords.y)) * 5.0;
-            radiance = radiance + emission;
+            radiance += emission;
             break;
         }
 
         // Accumulate emission.
-        // radiance = radiance + weight * /* ... */;
+        // radiance += weight * /* ... */;
 
         outgoing := -ray.dir;
 
@@ -93,10 +93,10 @@ pathtrace :: (start_ray: Ray, tlas_id: bvh_id, scene: Scene) -> vec3
         if incoming == vec3(0, 0, 0) { break; }
 
         prob := sample_matte_pdf(albedo_color, hit.normal, outgoing, incoming);
-        weight = weight * eval_matte(albedo_color, hit.normal, outgoing, incoming) / prob;
+        weight *= eval_matte(albedo_color, hit.normal, outgoing, incoming) / prob;
 
         // Update ray.
-        ray.ori = ray.ori + ray.dir * hit.t;
+        ray.ori += ray.dir * hit.t;
         ray.dir = incoming;
 
         // Check weight.
@@ -107,7 +107,7 @@ pathtrace :: (start_ray: Ray, tlas_id: bvh_id, scene: Scene) -> vec3
         {
             survive_prob := min(0.99, max(weight.x, max(weight.y, weight.z)));
             if random_f32() >= survive_prob { break; }
-            weight = weight / survive_prob;
+            weight /= survive_prob;
         }
     }
 
@@ -213,7 +213,7 @@ init_rng :: (global_id: uint, accum_counter: uint)
 // From: www.pcg-random.org and www.shadertoy.com/view/XlGcRh
 random_u32 :: () -> uint
 {
-    RNG_STATE = RNG_STATE * 747796405 + 2891336453;
+    RNG_STATE *= 747796405 + 2891336453;
     result := ((RNG_STATE >> ((RNG_STATE >> 28) + 4)) ~ RNG_STATE) * 277803737;
     result = (result >> 22) ~ result;
     return result;
@@ -222,7 +222,7 @@ random_u32 :: () -> uint
 // From 0 (inclusive) to 1 (exclusive)
 random_f32 :: () -> float
 {
-    RNG_STATE = RNG_STATE * 747796405 + 2891336453;
+    RNG_STATE *= 747796405 + 2891336453;
     result := ((RNG_STATE >> ((RNG_STATE >> 28) + 4)) ~ RNG_STATE) * 277803737;
     result = (result >> 22) ~ result;
     return float(result) / 4294967295.0;
