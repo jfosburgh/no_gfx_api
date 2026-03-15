@@ -168,22 +168,22 @@ main :: (vert_id: uint @vert_id, data: ^Data @data) -> Output
 }
 ```
 
-## Running examples
+## Building
 
-Binaries for dependencies are included.
-
-Run `make` to build all examples into the `build` directory.
-
-Run `make example1`, `make example2`, etc. to run individual examples.
-
-## Building (Contributors only)
-
-To build this project, you will need:
+Importing **no_gfx** into your own project mostly just involves copying the `gpu/` directory, but to build this project you will need:
 
 - [Odin >= 2026-02](https://odin-lang.org/)
 - [Vulkan SDK](https://vulkan.lunarg.com/)
 - [make](https://www.gnu.org/software/make/)
 
+Binaries for dependencies are included.
+
 See the [Makefile](Makefile) for all available commands.
+
+## Running examples
+
+Run `make` to build all examples into the `build` directory.
+
+Run `make example1`, `make example2`, etc. to run individual examples.
 
 Feel free to [contact me on discord](https://discord.com/users/leon2058) for any questions.
