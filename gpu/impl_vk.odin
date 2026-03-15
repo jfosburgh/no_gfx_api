@@ -1436,6 +1436,13 @@ _texture_create :: proc(desc: Texture_Desc, storage: gpuptr, queue: Queue = .Mai
 
 _texture_destroy :: proc(texture: Texture, loc := #caller_location)
 {
+    if ctx.validation
+    {
+        ok := true
+        ok &= pool_check(&ctx.textures, texture.handle, "texture", loc)
+        if !ok do return
+    }
+
     tex_info := pool_get(&ctx.textures, texture.handle)
     vk_image := tex_info.handle
 
@@ -1489,6 +1496,13 @@ get_or_add_sampler :: proc(info: vk.SamplerCreateInfo) -> vk.Sampler
 
 _texture_view_descriptor :: proc(texture: Texture, view_desc: Texture_View_Desc, loc := #caller_location) -> Texture_Descriptor
 {
+    if ctx.validation
+    {
+        ok := true
+        ok &= pool_check(&ctx.textures, texture.handle, "texture", loc)
+        if !ok do return {}
+    }
+
     tex_info := pool_get(&ctx.textures, texture.handle)
     vk_image := tex_info.handle
 
@@ -1524,6 +1538,13 @@ _texture_view_descriptor :: proc(texture: Texture, view_desc: Texture_View_Desc,
 
 _texture_rw_view_descriptor :: proc(texture: Texture, view_desc: Texture_View_Desc, loc := #caller_location) -> Texture_Descriptor
 {
+    if ctx.validation
+    {
+        ok := true
+        ok &= pool_check(&ctx.textures, texture.handle, "texture", loc)
+        if !ok do return {}
+    }
+
     tex_info := pool_get(&ctx.textures, texture.handle)
     vk_image := tex_info.handle
 
