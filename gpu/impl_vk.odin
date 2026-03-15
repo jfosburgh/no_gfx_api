@@ -976,6 +976,8 @@ _cleanup :: proc(loc := #caller_location)
 
     if can_destroy_device {
         vk.DestroyDevice(ctx.device, nil)
+    } else {
+        runtime.debug_trap()  // Break here so user has a chance to read the last error logs.
     }
 }
 
