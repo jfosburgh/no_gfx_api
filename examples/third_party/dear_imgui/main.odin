@@ -11,6 +11,13 @@ import imgui "odin-imgui"
 import imgui_impl_sdl3 "odin-imgui/imgui_impl_sdl3"
 import imgui_impl_nogfx "odin-imgui/imgui_impl_nogfx"
 
+// NOTE: This example uses the no_gfx backend for Dear Imgui.
+// This makes some things simpler, like using custom textures in Dear ImGui windows.
+// Alternatively, for a more maintained and up to date renderer the
+// Vulkan backend can be used alongside the no_gfx escape hatch procedures
+// (e.g. get_vulkan_instance(), get_vulkan_device(), etc.), but that
+// will make advanced features a lot more awkward to use.
+
 Start_Window_Size_X :: 1000
 Start_Window_Size_Y :: 1000
 Frames_In_Flight :: 3
