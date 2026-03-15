@@ -9,7 +9,7 @@ import "../../../gpu"
 import sdl "vendor:sdl3"
 import imgui "odin-imgui"
 import imgui_impl_sdl3 "odin-imgui/imgui_impl_sdl3"
-import imgui_impl_vulkan "odin-imgui/imgui_impl_vulkan"
+import imgui_impl_nogfx "odin-imgui/imgui_impl_nogfx"
 
 Start_Window_Size_X :: 1000
 Start_Window_Size_Y :: 1000
@@ -88,9 +88,9 @@ main :: proc()
     gpu.cmd_barrier(upload_cmd_buf, .Transfer, .All, {})
     gpu.queue_submit(.Main, { upload_cmd_buf })
 
-    imgui_ctx := init_imgui(window)
+    imgui_ctx := init_imgui(window, &desc_pool)
     defer {
-        imgui_impl_vulkan.shutdown()
+        imgui_impl_nogfx.shutdown()
         imgui_impl_sdl3.shutdown()
         imgui.destroy_context(imgui_ctx)
     }
@@ -169,8 +169,7 @@ main :: proc()
         // Render ImGui on top
         draw_data := imgui.get_draw_data()
         if draw_data != nil && draw_data.cmd_lists_count > 0 {
-            vk_cmd_buf := gpu.get_vulkan_command_buffer(cmd_buf)
-            imgui_impl_vulkan.render_draw_data(draw_data, vk_cmd_buf)
+            imgui_impl_nogfx.render_draw_data(draw_data, cmd_buf)
         }
 
         gpu.cmd_end_render_pass(cmd_buf)
@@ -210,7 +209,7 @@ handle_window_events :: proc(window: ^sdl.Window) -> (proceed: bool)
     return
 }
 
-init_imgui :: proc(window: ^sdl.Window) -> ^imgui.Context
+init_imgui :: proc(window: ^sdl.Window, desc_pool: ^gpu.Descriptor_Pool) -> ^imgui.Context
 {
     imgui.CHECKVERSION()
     ctx := imgui.create_context(nil)
@@ -220,51 +219,11 @@ init_imgui :: proc(window: ^sdl.Window) -> ^imgui.Context
 
     imgui_impl_sdl3.init_for_vulkan(window)
 
-    vk_instance := gpu.get_vulkan_instance()
-    vk_physical_device := gpu.get_vulkan_physical_device()
-    vk_device := gpu.get_vulkan_device()
-    vk_queue := gpu.get_vulkan_queue(.Main)
-    vk_queue_family := gpu.get_vulkan_queue_family(.Main)
-    swapchain_image_count := gpu.get_swapchain_image_count()
-
-    imgui_vk_init_info: imgui_impl_vulkan.Init_Info = {}
-    color_format := vk.Format.B8G8R8A8_UNORM
-
-    imgui_vk_init_info.api_version = vk.API_VERSION_1_3
-    imgui_vk_init_info.instance = vk_instance
-    imgui_vk_init_info.physical_device = vk_physical_device
-    imgui_vk_init_info.device = vk_device
-    imgui_vk_init_info.queue_family = vk_queue_family
-    imgui_vk_init_info.queue = vk_queue
-    imgui_vk_init_info.descriptor_pool = {}
-    imgui_vk_init_info.render_pass = {}
-    imgui_vk_init_info.min_image_count = 2
-    imgui_vk_init_info.image_count = swapchain_image_count
-    imgui_vk_init_info.msaa_samples = {}
-    imgui_vk_init_info.pipeline_cache = {}
-    imgui_vk_init_info.subpass = 0
-    imgui_vk_init_info.descriptor_pool_size = 1000
-    imgui_vk_init_info.use_dynamic_rendering = true
-    imgui_vk_init_info.pipeline_rendering_create_info = {
-        sType = .PIPELINE_RENDERING_CREATE_INFO_KHR,
-        colorAttachmentCount = 1,
-        pColorAttachmentFormats = &color_format,
-    }
-    imgui_vk_init_info.allocator = nil
-    imgui_vk_init_info.check_vk_result_fn = nil
-    imgui_vk_init_info.min_allocation_size = 1024 * 1024
-
-    vk_loader_func :: proc "c" (function_name: cstring, user_data: rawptr) -> vk.ProcVoidFunction {
-        instance := cast(vk.Instance) user_data
-        return vk.GetInstanceProcAddr(instance, function_name)
-    }
-    load_result := imgui_impl_vulkan.load_functions(vk.API_VERSION_1_3, vk_loader_func, cast(rawptr) vk_instance)
-    assert(load_result, "Failed to load Vulkan functions for imgui")
-
-    result := imgui_impl_vulkan.init(&imgui_vk_init_info)
+    result := imgui_impl_nogfx.init({
+        frames_in_flight = Frames_In_Flight
+    }, desc_pool)
     assert(result, "Failed to initialize imgui vulkan backend")
 
-    imgui_impl_vulkan.create_fonts_texture()
-
+    imgui_impl_nogfx.create_fonts_texture(desc_pool)
     return ctx
 }
