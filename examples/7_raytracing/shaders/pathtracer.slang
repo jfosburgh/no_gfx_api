@@ -119,7 +119,7 @@ float3 pathtrace(Ray start_ray, uint tlas_id, Scene scene)
     float3 radiance = float3(0.0, 0.0, 0.0);
     float3 weight = float3(1.0, 1.0, 1.0);
     Ray ray = start_ray;
-    float3 albedo_color = float3(0.8, 0.8, 0.8);
+    float3 albedo_color = float3(0.9, 0.9, 0.9);
 
     int max_bounces = 5;
     for (int bounce = 0; bounce <= max_bounces; bounce++)
@@ -129,7 +129,7 @@ float3 pathtrace(Ray start_ray, uint tlas_id, Scene scene)
         {
             float2 coords = float2(atan2(ray.dir.x, ray.dir.z) / (2.0 * pi), acos(clamp(ray.dir.y, -1.0, 1.0)) / pi);
             float3 emission = lerp(float3(0.8, 0.7, 0.1), float3(0.1, 0.2, 0.8), float3(coords.y)) * 5.0;
-            radiance += emission;
+            radiance += emission * weight;
             break;
         }
 
