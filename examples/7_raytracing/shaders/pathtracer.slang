@@ -198,6 +198,7 @@ HitInfo ray_scene_intersection(Ray ray, uint tlas_id, Scene scene)
     float4 n1 = mesh.normal[mesh.indices[base_idx + 1]];
     float4 n2 = mesh.normal[mesh.indices[base_idx + 2]];
     float4 normal = normalize(n0 * w + n1 * hit.barycentrics.x + n2 * hit.barycentrics.y);
+    if (hit.front_face) normal *= -1.0;
     float4 world_normal = normalize(mul(float4(normal.xyz, 1.0), hit.world_to_object));
 
     hit_info.hit = true;
@@ -280,21 +281,17 @@ float sample_hemisphere_cos_pdf(float3 normal, float3 direction)
 
 float3 sample_matte(float3 color, float3 normal, float3 outgoing, float2 rn)
 {
-    float3 up_normal = dot(normal, outgoing) > 0.0 ? normal : -normal;
-    return sample_hemisphere_cos(up_normal, rn);
+    return sample_hemisphere_cos(normal, rn);
 }
 
 float3 eval_matte(float3 color, float3 normal, float3 outgoing, float3 incoming)
 {
-    if (dot(normal, incoming) * dot(normal, outgoing) <= 0.0) { return float3(0.0, 0.0, 0.0); }
     return color / pi * abs(dot(normal, incoming));
 }
 
 float sample_matte_pdf(float3 color, float3 normal, float3 outgoing, float3 incoming)
 {
-    if (dot(normal, incoming) * dot(normal, outgoing) <= 0.0) { return 0.0; }
-    float3 up_normal = dot(normal, outgoing) > 0.0 ? normal : -normal;
-    return sample_hemisphere_cos_pdf(up_normal, incoming);
+    return sample_hemisphere_cos_pdf(normal, incoming);
 }
 
 bool is_finite(float3 v)
