@@ -648,7 +648,10 @@ parse_statement :: proc(using p: ^Parser) -> ^Ast_Statement
 
         at += 1
 
-        block_stmt.statements = parse_statement_list(p)
+        if tokens[at].type != .RBrace {
+            block_stmt.statements = parse_statement_list(p)
+        }
+
         required_token(p, .RBrace)
         node = block_stmt
     }
