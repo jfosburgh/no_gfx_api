@@ -441,7 +441,7 @@ _parse_file :: proc(using p: ^Parser) -> Ast
                 }
                 else
                 {
-                    parse_error(p, "Expecting struct, global variable of procedure at top level.")
+                    parse_error(p, "Expecting struct, global variable or procedure at top level.")
                     break loop
                 }
             }
