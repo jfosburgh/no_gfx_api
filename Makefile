@@ -125,17 +125,17 @@ shaders_slang:
 		base="$${slang%.slang}"; \
 		if [ -f "$$base.vert.nosl" ]; then \
 			echo "Compiling $$slang to vertex shader"; \
-			slangc -target spirv -target glsl -fvk-use-scalar-layout -force-glsl-scalar-layout -validate-ir -no-mangle -entry vertexMain -stage vertex "$$slang" -o "$$base.vert.spv" -o "$$base.vert.glsl"; \
+			slangc -target spirv -target glsl -fvk-use-c-layout -fvk-use-scalar-layout -force-glsl-scalar-layout -validate-ir -no-mangle -entry vertexMain -stage vertex "$$slang" -o "$$base.vert.spv" -o "$$base.vert.glsl"; \
 			spirv-val "$$base.vert.spv" --relax-block-layout --scalar-block-layout --target-env vulkan1.3; \
 		fi; \
 		if [ -f "$$base.frag.nosl" ]; then \
 			echo "Compiling $$slang to fragment shader"; \
-			slangc -target spirv -target glsl -fvk-use-scalar-layout -force-glsl-scalar-layout -validate-ir -no-mangle -entry fragmentMain -stage fragment "$$slang" -o "$$base.frag.spv" -o "$$base.frag.glsl"; \
+			slangc -target spirv -target glsl -fvk-use-c-layout -fvk-use-scalar-layout -force-glsl-scalar-layout -validate-ir -no-mangle -entry fragmentMain -stage fragment "$$slang" -o "$$base.frag.spv" -o "$$base.frag.glsl"; \
 			spirv-val "$$base.frag.spv" --relax-block-layout --scalar-block-layout --target-env vulkan1.3; \
 		fi; \
 		if [ -f "$$base.comp.nosl" ]; then \
 			echo "Compiling $$slang to compute shader"; \
-			slangc -target spirv -target glsl -fvk-use-scalar-layout -force-glsl-scalar-layout -validate-ir -no-mangle -entry computeMain -stage compute "$$slang" -o "$$base.comp.spv" -o "$$base.comp.glsl"; \
+			slangc -target spirv -target glsl -fvk-use-c-layout -fvk-use-scalar-layout -force-glsl-scalar-layout -validate-ir -no-mangle -entry computeMain -stage compute "$$slang" -o "$$base.comp.spv" -o "$$base.comp.glsl"; \
 			spirv-val "$$base.comp.spv" --relax-block-layout --scalar-block-layout --target-env vulkan1.3; \
 		fi; \
 	done

@@ -631,7 +631,9 @@ codegen_expr :: proc(expression: ^Ast_Expr)
 
 // NOTE: Because there is no forward declaration of structs in GLSL, we need to
 // do a DFS on the declarations. Pointers and slices are ok, though, because those
-// *can* be forward declared (obviously).
+// *can* be forward declared.
+// NOTE: Scalar layout does not exactly give you C layout, you sometimes need to add
+// some padding to turn it into exact C layout. For clarity all padding is explicit.
 generate_struct_decl :: proc(generated: ^map[^Ast_Type]struct{}, type: ^Ast_Type, name: string)
 {
     _, found := generated[type]
@@ -651,15 +653,107 @@ generate_struct_decl :: proc(generated: ^map[^Ast_Type]struct{}, type: ^Ast_Type
     writeln("{")
     if writer_scope()
     {
+        offset: u32
+        struct_align: u32
+        padding_field_id: u32
         for field in type.members
         {
+            field_size, field_align := compute_type_size_and_align(field.type)
+            struct_align = max(struct_align, field_align)
+
+            old_offset := offset
+            offset = align_up(offset, field_align)
+            write_padding_field(offset, old_offset, &padding_field_id)
+
+            offset += field_size
             writefln("%v %v;", type_to_glsl(field.type), ident_to_glsl(field.name))
         }
+
+        old_offset := offset
+        offset = align_up(offset, struct_align)
+        write_padding_field(offset, old_offset, &padding_field_id)
     }
     writeln("};")
     writefln("%v %v_ZERO;", name, name)
 
     generated[type] = {}
+
+    write_padding_field :: proc(offset: u32, old_offset: u32, field_id: ^u32)
+    {
+        if offset == old_offset do return
+        ensure(offset >= old_offset)
+        diff := offset - old_offset
+        ensure(diff % 4 == 0)
+
+        for _ in 0..<diff/4
+        {
+            writefln("uint _res_padding_%v;", field_id^)
+            field_id^ += 1
+        }
+    }
+}
+
+compute_type_size_and_align :: proc(type: ^Ast_Type) -> (size: u32, align: u32)
+{
+    switch type.kind
+    {
+        case .Poison:  return 0, 4
+        case .None:    return 0, 4
+        case .Unknown: return 0, 4
+        case .Pointer: return 8, 8
+        case .Slice:   return 8, 8
+        case .Proc:    return 8, 8
+        case .Primitive:
+        {
+            switch type.primitive_kind
+            {
+                case .None:          return 0, 4
+                case .Untyped_Int:   return 4, 4
+                case .Untyped_Float: return 4, 4
+                case .Bool:          return 4, 4
+                case .Float:         return 4, 4
+                case .Uint:          return 4, 4
+                case .Int:           return 4, 4
+                case .Texture_ID:    return 4, 4
+                case .Sampler_ID:    return 4, 4
+                case .Vec2:          return 8, 4
+                case .Vec3:          return 12, 4
+                case .Vec4:          return 16, 4
+                case .Mat4:          return 64, 4
+                case .String:        return 0, 4
+                case .Ray_Query:     return 0, 4
+                case .BVH_ID:        return 4, 4
+            }
+        }
+        case .Struct: return compute_struct_size_and_align(type)
+        case .Label:  return compute_struct_size_and_align(type.base)
+    }
+
+    return 0, 4
+
+    compute_struct_size_and_align :: proc(type: ^Ast_Type) -> (size: u32, align: u32)
+    {
+        if len(type.members) == 0 do return 0, 4
+
+        offset: u32
+        struct_align: u32
+        for field in type.members
+        {
+            field_size, field_align := compute_type_size_and_align(field.type)
+            struct_align = max(struct_align, field_align)
+            offset = align_up(offset, field_align)
+            offset += field_size
+        }
+
+        offset = align_up(offset, struct_align)
+        return offset, struct_align
+    }
+}
+
+align_up :: proc(x, align: u32) -> (aligned: u32)
+{
+    assert(0 == (align & (align - 1)), "must align to a power of two")
+    return (x + (align - 1)) &~ (align - 1)
 }
 
 type_to_glsl :: proc(type: ^Ast_Type) -> string
