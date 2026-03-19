@@ -397,6 +397,15 @@ codegen_statement :: proc(statement: ^Ast_Statement, insert_semi := true)
             }
             writeln("}")
         }
+        case ^Ast_Block:
+        {
+            write("{\n")
+            if writer_scope() {
+                codegen_scope_decls(stmt.scope)
+                codegen_statement_list(stmt.statements)
+            }
+            writeln("}")
+        }
         case ^Ast_Continue:
         {
             write("continue")

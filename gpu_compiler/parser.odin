@@ -222,6 +222,7 @@ Any_Statement :: union
     ^Ast_Return,
     ^Ast_If,
     ^Ast_For,
+    ^Ast_Block,
     ^Ast_Break,
     ^Ast_Continue,
     ^Ast_Discard,
@@ -286,6 +287,13 @@ Ast_For :: struct
     cond: ^Ast_Expr,
     iter: ^Ast_Assign,
 
+    statements: []^Ast_Statement,
+    scope: ^Ast_Scope,
+}
+
+Ast_Block :: struct
+{
+    using base_statement: Ast_Statement,
     statements: []^Ast_Statement,
     scope: ^Ast_Scope,
 }
@@ -627,6 +635,22 @@ parse_statement :: proc(using p: ^Parser) -> ^Ast_Statement
         required_token(p, .RBrace)
 
         node = for_stmt
+    }
+    else if tokens[at].type == .LBrace
+    {
+        old_scope := scope
+        scope = new(Ast_Scope)
+        scope.enclosing_scope = old_scope
+        defer scope = old_scope
+
+        block_stmt := make_statement(p, Ast_Block)
+        block_stmt.scope = scope
+
+        at += 1
+
+        block_stmt.statements = parse_statement_list(p)
+        required_token(p, .RBrace)
+        node = block_stmt
     }
     else if tokens[at].type == .Continue
     {

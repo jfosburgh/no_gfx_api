@@ -208,10 +208,19 @@ typecheck_statement :: proc(using c: ^Checker, statement: ^Ast_Statement)
             old_scope := scope
             scope = stmt.scope
             defer scope = old_scope
+            resolve_scope_decls(c)
 
             if stmt.define != nil do typecheck_statement(c, stmt.define)
             if stmt.cond != nil   do typecheck_expr(c, stmt.cond)
             if stmt.iter != nil   do typecheck_statement(c, stmt.iter)
+            typecheck_statement_list(c, stmt.statements)
+        }
+        case ^Ast_Block:
+        {
+            old_scope := scope
+            scope = stmt.scope
+            defer scope = old_scope
+            resolve_scope_decls(c)
             typecheck_statement_list(c, stmt.statements)
         }
         case ^Ast_Break:
