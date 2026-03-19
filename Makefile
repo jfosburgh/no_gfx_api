@@ -1,3 +1,4 @@
+MAKEFLAGS += --no-print-directory
 .PHONY: *
 .NOTPARALLEL: default
 examples := 1_triangle 2_textures 3_3D 4_indirect_triangles 5_compute_shaders 6_deferred_async_load 7_raytracing third_party/dear_imgui
@@ -55,7 +56,7 @@ check_gpu:
 	odin check gpu -no-entry-point -vet
 
 # Builds all examples
-build:
+build: compiler
 	$(foreach example,$(examples),make build_example example=$(example);)
 
 build_slang:
@@ -108,11 +109,11 @@ shader_nosl:
 	glslangValidator $(glsl_flags) -V "$(shader).glsl" -o "$(shader).spv"
 
 # Compiles NOSL shaders for one example via gpu_compiler + glslangValidator.
-shaders_nosl: compiler
+shaders_nosl:
 	$(foreach shader,$(wildcard examples/$(example)/shaders/*.nosl),make shader_nosl shader=$(subst .nosl,,$(shader));)
 
 # Builds the NOSL shaders for all examples
-shaders_nosl_all:
+shaders_nosl_all: compiler
 	$(foreach example,$(examples),make shaders_nosl example=$(example);)
 
 # Compiles Slang shaders for one example and validates SPIR-V output.
