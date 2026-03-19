@@ -49,23 +49,14 @@ codegen :: proc(ast: Ast, shader_type: Shader_Type, input_path: string, output_p
     writeln("")
 
     // Generate all struct decls first (functions might use some of these structs) (can't forward-declare structs in GLSL)
+    generated_struct_decls: map[^Ast_Type]struct{}
     for decl in ast.scope.decls
     {
         #partial switch decl.type.kind
         {
             case .Struct:
             {
-                writefln("struct %v", decl.name)
-                writeln("{")
-                if writer_scope()
-                {
-                    for field in decl.type.members
-                    {
-                        writefln("%v %v;", type_to_glsl(field.type), ident_to_glsl(field.name))
-                    }
-                }
-                writeln("};")
-                writefln("%v %v_ZERO;", decl.name, decl.name)
+                generate_struct_decl(&generated_struct_decls, decl.type, decl.name)
             }
         }
     }
@@ -627,6 +618,39 @@ codegen_expr :: proc(expression: ^Ast_Expr)
             write(")")
         }
     }
+}
+
+// NOTE: Because there is no forward declaration of structs in GLSL, we need to
+// do a DFS on the declarations. Pointers and slices are ok, though, because those
+// *can* be forward declared (obviously).
+generate_struct_decl :: proc(generated: ^map[^Ast_Type]struct{}, type: ^Ast_Type, name: string)
+{
+    _, found := generated[type]
+    if found do return
+
+    // Generate struct decls it depends on first.
+    for field in type.members
+    {
+        if field.type.kind == .Label
+        {
+            label_name := field.type.name.text
+            generate_struct_decl(generated, field.type.base, label_name)
+        }
+    }
+
+    writefln("struct %v", name)
+    writeln("{")
+    if writer_scope()
+    {
+        for field in type.members
+        {
+            writefln("%v %v;", type_to_glsl(field.type), ident_to_glsl(field.name))
+        }
+    }
+    writeln("};")
+    writefln("%v %v_ZERO;", name, name)
+
+    generated[type] = {}
 }
 
 type_to_glsl :: proc(type: ^Ast_Type) -> string
