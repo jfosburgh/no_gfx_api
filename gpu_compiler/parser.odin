@@ -165,6 +165,7 @@ Ast_Member_Access :: struct
     using base_expr: Ast_Expr,
     target: ^Ast_Expr,
     member_name: string,
+    is_swizzle: bool,
 }
 
 Ast_Array_Access :: struct
@@ -1035,8 +1036,8 @@ parse_type :: proc(using p: ^Parser) -> ^Ast_Type
         case "vec3": prim_type = .Vec3
         case "vec4": prim_type = .Vec4
         case "bool": prim_type = .Bool
-        case "textureid": prim_type = .Texture_ID
-        case "samplerid": prim_type = .Sampler_ID
+        case "texture_id": prim_type = .Texture_ID
+        case "sampler_id": prim_type = .Sampler_ID
         case "mat4": prim_type = .Mat4
         case "Ray_Query": prim_type = .Ray_Query
         case "bvh_id": prim_type = .BVH_ID

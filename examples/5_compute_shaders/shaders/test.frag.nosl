@@ -1,10 +1,10 @@
 Data :: struct
 {
-    texture_id: textureid,
-    sampler_id: samplerid,
+    texture: texture_id,
+    sampler: sampler_id,
 }
 
 main :: (uv: vec2 @in_loc(0), data: ^Data @data) -> vec4 @out_loc(0)
 {
-    return texture_sample(data.texture_id, data.sampler_id, uv);
+    return texture_sample(data.texture, data.sampler, uv);
 }

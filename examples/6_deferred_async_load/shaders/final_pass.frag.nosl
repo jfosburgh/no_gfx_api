@@ -1,11 +1,11 @@
 Data :: struct
 {
-    gbuffer_albedo: textureid,
-    gbuffer_albedo_sampler: samplerid,
-    gbuffer_normal: textureid,
-    gbuffer_normal_sampler: samplerid,
-    gbuffer_metallic_roughness: textureid,
-    gbuffer_metallic_roughness_sampler: samplerid,
+    gbuffer_albedo: texture_id,
+    gbuffer_albedo_sampler: sampler_id,
+    gbuffer_normal: texture_id,
+    gbuffer_normal_sampler: sampler_id,
+    gbuffer_metallic_roughness: texture_id,
+    gbuffer_metallic_roughness_sampler: sampler_id,
     selected_texture_type: int,
 }
 

@@ -19,8 +19,8 @@ Instance :: struct
 
 Data :: struct
 {
-    output_texture_id: textureid,
-    tlas_id: bvh_id,
+    output_texture: texture_id,
+    tlas: bvh_id,
     scene: Scene,
     resolution: vec2,
     accum_counter: uint,
@@ -44,19 +44,19 @@ main :: (data: ^Data @data, global_invocation_id: vec3 @global_invocation_id)
     camera_ray: Ray;
     camera_ray.ori = world_camera_pos;
     camera_ray.dir = world_camera_lookat;
-    color := pathtrace(camera_ray, data.tlas_id, data.scene);
+    color := pathtrace(camera_ray, data.tlas, data.scene);
 
     if global_invocation_id.x < data.resolution.x && global_invocation_id.y < data.resolution.y
     {
         if data.accum_counter > 1
         {
             weight := 1.0 / float(data.accum_counter);
-            prev_color := texture_load(data.output_texture_id, global_invocation_id.xy).xyz;
+            prev_color := texture_load(data.output_texture, global_invocation_id.xy).xyz;
             color = prev_color * (1 - weight) + color * weight;
             color = max(color, vec3(0, 0, 0));
         }
 
-        texture_store(data.output_texture_id, global_invocation_id.xy, vec4(color, 1));
+        texture_store(data.output_texture, global_invocation_id.xy, vec4(color, 1));
     }
 }
 

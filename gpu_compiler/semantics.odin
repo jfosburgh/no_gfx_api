@@ -342,8 +342,10 @@ typecheck_expr :: proc(using c: ^Checker, expression: ^Ast_Expr)
             if expr.target.type.kind == .Primitive
             {
                 type, is_swizzle := handle_vector_swizzle(expr.target.type, expr.member_name)
-                if is_swizzle {
+                if is_swizzle
+                {
                     expr.type = type
+                    expr.is_swizzle = true
                     break
                 }
             }
@@ -483,8 +485,8 @@ VEC2_TYPE := Ast_Type { kind = .Primitive, primitive_kind = .Vec2, name = { text
 VEC3_TYPE := Ast_Type { kind = .Primitive, primitive_kind = .Vec3, name = { text = "vec3" } }
 VEC4_TYPE := Ast_Type { kind = .Primitive, primitive_kind = .Vec4, name = { text = "vec4" } }
 BOOL_TYPE := Ast_Type { kind = .Primitive, primitive_kind = .Bool, name = { text = "bool" } }
-TEXTUREID_TYPE := Ast_Type { kind = .Primitive, primitive_kind = .Texture_ID, name = { text = "textureid" } }
-SAMPLERID_TYPE := Ast_Type { kind = .Primitive, primitive_kind = .Sampler_ID, name = { text = "samplerid" } }
+TEXTURE_ID_TYPE := Ast_Type { kind = .Primitive, primitive_kind = .Texture_ID, name = { text = "texture_id" } }
+SAMPLER_ID_TYPE := Ast_Type { kind = .Primitive, primitive_kind = .Sampler_ID, name = { text = "sampler_id" } }
 BVH_ID_TYPE := Ast_Type { kind = .Primitive, primitive_kind = .BVH_ID, name = { text = "bvh_id" } }
 MAT4_TYPE := Ast_Type { kind = .Primitive, primitive_kind = .Mat4, name = { text = "mat4" } }
 STRING_TYPE := Ast_Type { kind = .Primitive, primitive_kind = .String, name = { text = "string" } }
@@ -584,9 +586,9 @@ INTRINSICS: [dynamic]^Ast_Decl
 add_intrinsics :: proc()
 {
     // Resource access
-    add_intrinsic("texture_sample", { &TEXTUREID_TYPE, &SAMPLERID_TYPE, &VEC2_TYPE }, { "tex_idx", "sampler_idx", "uv" }, &VEC4_TYPE)
-    add_intrinsic("texture_store", { &TEXTUREID_TYPE, &VEC2_TYPE, &VEC4_TYPE }, { "tex_idx", "coord", "value" }, nil)
-    add_intrinsic("texture_load", { &TEXTUREID_TYPE, &VEC2_TYPE }, { "tex_idx", "coord" }, &VEC4_TYPE)
+    add_intrinsic("texture_sample", { &TEXTURE_ID_TYPE, &SAMPLER_ID_TYPE, &VEC2_TYPE }, { "tex_idx", "sampler_idx", "uv" }, &VEC4_TYPE)
+    add_intrinsic("texture_store", { &TEXTURE_ID_TYPE, &VEC2_TYPE, &VEC4_TYPE }, { "tex_idx", "coord", "value" }, nil)
+    add_intrinsic("texture_load", { &TEXTURE_ID_TYPE, &VEC2_TYPE }, { "tex_idx", "coord" }, &VEC4_TYPE)
 
     // Raytracing
     ray_result_type := add_intrinsic_struct("Ray_Result", { &UINT_TYPE, &FLOAT_TYPE, &UINT_TYPE, &UINT_TYPE, &VEC2_TYPE, &BOOL_TYPE, &MAT4_TYPE, &MAT4_TYPE }, { "kind", "t", "instance_idx", "primitive_idx", "barycentrics", "front_face", "object_to_world", "world_to_object" })

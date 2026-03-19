@@ -61,7 +61,7 @@ codegen :: proc(ast: Ast, shader_type: Shader_Type, input_path: string, output_p
                 {
                     for field in decl.type.members
                     {
-                        writefln("%v %v;", type_to_glsl(field.type), field.name)
+                        writefln("%v %v;", type_to_glsl(field.type), ident_to_glsl(field.name))
                     }
                 }
                 writeln("};")
@@ -435,7 +435,7 @@ codegen_statement :: proc(statement: ^Ast_Statement, insert_semi := true)
                         if member.attr == nil do continue
                         writef("%v = ", attribute_to_glsl(member.attr.?, writer.ast, writer.shader_type))
                         codegen_expr(stmt.expr)
-                        writef(".%v; ", member.name)
+                        writef(".%v; ", ident_to_glsl(member.name))
                     }
                 }
                 else
@@ -524,10 +524,13 @@ codegen_expr :: proc(expression: ^Ast_Expr)
         case ^Ast_Member_Access:
         {
             codegen_expr(expr.target)
+
+            name := expr.member_name if expr.is_swizzle else ident_to_glsl(expr.member_name)
+
             if expr.target.type.kind == .Pointer || expr.target.type.kind == .Slice {
-                writef("._res_.%v", expr.member_name)
+                writef("._res_.%v", name)
             } else {
-                writef(".%v", expr.member_name)
+                writef(".%v", name)
             }
         }
         case ^Ast_Array_Access:
@@ -883,8 +886,8 @@ write_preamble :: proc()
     writeln("vec3 vec3_ZERO;")
     writeln("vec4 vec4_ZERO;")
     writeln("mat4 mat4_ZERO;")
-    writeln("uint textureid_ZERO;")
-    writeln("uint samplerid_ZERO;")
+    writeln("uint texture_id_ZERO;")
+    writeln("uint sampler_id_ZERO;")
     writeln("uint bvh_id_ZERO;")
     writeln("")
 }
@@ -955,53 +958,53 @@ mat4 _res_mat4_from_mat4x3(mat4x3 m)
 
 struct Ray_Desc
 {
-    uint flags;
-    uint cull_mask;
-    float t_min;
-    float t_max;
-    vec3 origin;
-    vec3 dir;
+    uint flags_;
+    uint cull_mask_;
+    float t_min_;
+    float t_max_;
+    vec3 origin_;
+    vec3 dir_;
 };
 Ray_Desc Ray_Desc_ZERO;
 
 struct Ray_Result
 {
-    uint kind;
-    float t;
-    uint instance_idx;
-    uint primitive_idx;
-    vec2 barycentrics;
-    bool front_face;
-    mat4 object_to_world;
-    mat4 world_to_object;
+    uint kind_;
+    float t_;
+    uint instance_idx_;
+    uint primitive_idx_;
+    vec2 barycentrics_;
+    bool front_face_;
+    mat4 object_to_world_;
+    mat4 world_to_object_;
 };
 Ray_Result Ray_Result_ZERO;
 
 Ray_Result rayquery_result(rayQueryEXT rq)
 {
     Ray_Result res;
-    res.kind = rayQueryGetIntersectionTypeEXT(rq, true);
-    res.t = rayQueryGetIntersectionTEXT(rq, true);
-    res.instance_idx  = rayQueryGetIntersectionInstanceIdEXT(rq, true);
-    res.primitive_idx = rayQueryGetIntersectionPrimitiveIndexEXT(rq, true);
-    res.front_face    = rayQueryGetIntersectionFrontFaceEXT(rq, true);
-    res.object_to_world = _res_mat4_from_mat4x3(rayQueryGetIntersectionObjectToWorldEXT(rq, true));
-    res.world_to_object = _res_mat4_from_mat4x3(rayQueryGetIntersectionWorldToObjectEXT(rq, true));
-    res.barycentrics    = rayQueryGetIntersectionBarycentricsEXT(rq, true);
+    res.kind_ = rayQueryGetIntersectionTypeEXT(rq, true);
+    res.t_ = rayQueryGetIntersectionTEXT(rq, true);
+    res.instance_idx_  = rayQueryGetIntersectionInstanceIdEXT(rq, true);
+    res.primitive_idx_ = rayQueryGetIntersectionPrimitiveIndexEXT(rq, true);
+    res.front_face_    = rayQueryGetIntersectionFrontFaceEXT(rq, true);
+    res.object_to_world_ = _res_mat4_from_mat4x3(rayQueryGetIntersectionObjectToWorldEXT(rq, true));
+    res.world_to_object_ = _res_mat4_from_mat4x3(rayQueryGetIntersectionWorldToObjectEXT(rq, true));
+    res.barycentrics_    = rayQueryGetIntersectionBarycentricsEXT(rq, true);
     return res;
 }
 
 Ray_Result rayquery_candidate(rayQueryEXT rq)
 {
     Ray_Result res;
-    res.kind = rayQueryGetIntersectionTypeEXT(rq, false);
-    res.t = rayQueryGetIntersectionTEXT(rq, false);
-    res.instance_idx  = rayQueryGetIntersectionInstanceIdEXT(rq, false);
-    res.primitive_idx = rayQueryGetIntersectionPrimitiveIndexEXT(rq, false);
-    res.front_face    = rayQueryGetIntersectionFrontFaceEXT(rq, false);
-    res.object_to_world = _res_mat4_from_mat4x3(rayQueryGetIntersectionObjectToWorldEXT(rq, false));
-    res.world_to_object = _res_mat4_from_mat4x3(rayQueryGetIntersectionWorldToObjectEXT(rq, false));
-    res.barycentrics    = rayQueryGetIntersectionBarycentricsEXT(rq, false);
+    res.kind_ = rayQueryGetIntersectionTypeEXT(rq, false);
+    res.t_ = rayQueryGetIntersectionTEXT(rq, false);
+    res.instance_idx_  = rayQueryGetIntersectionInstanceIdEXT(rq, false);
+    res.primitive_idx_ = rayQueryGetIntersectionPrimitiveIndexEXT(rq, false);
+    res.front_face_    = rayQueryGetIntersectionFrontFaceEXT(rq, false);
+    res.object_to_world_ = _res_mat4_from_mat4x3(rayQueryGetIntersectionObjectToWorldEXT(rq, false));
+    res.world_to_object_ = _res_mat4_from_mat4x3(rayQueryGetIntersectionWorldToObjectEXT(rq, false));
+    res.barycentrics_    = rayQueryGetIntersectionBarycentricsEXT(rq, false);
     return res;
 }
 
@@ -1009,12 +1012,12 @@ void rayquery_init(rayQueryEXT rq, Ray_Desc desc, uint bvh)
 {
     rayQueryInitializeEXT(rq,
                           _res_bvhs_[nonuniformEXT(bvh)],
-                          desc.flags,
-                          desc.cull_mask,
-                          desc.origin,
-                          desc.t_min,
-                          desc.dir,
-                          desc.t_max);
+                          desc.flags_,
+                          desc.cull_mask_,
+                          desc.origin_,
+                          desc.t_min_,
+                          desc.dir_,
+                          desc.t_max_);
 }
 
 bool rayquery_proceed(rayQueryEXT rq)

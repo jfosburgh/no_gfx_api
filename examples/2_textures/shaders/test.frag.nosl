@@ -1,9 +1,9 @@
 
 Data :: struct
 {
-    texture_a: textureid,
-    texture_b: textureid,
-    s: samplerid,
+    texture_a: texture_id,
+    texture_b: texture_id,
+    s: sampler_id,
     fade: float,
 }
 
