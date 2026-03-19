@@ -86,7 +86,7 @@ codegen :: proc(ast: Ast, shader_type: Shader_Type, input_path: string, output_p
                 {
                     if arg.attr != nil do continue
 
-                    writef("%v %v", type_to_glsl(arg.type), arg.name)
+                    writef("%v %v", type_to_glsl(arg.type), ident_to_glsl(arg.name))
                     if i < len(decl.type.args) - 1 {
                         write(", ")
                     }
