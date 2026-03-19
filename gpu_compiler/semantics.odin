@@ -723,6 +723,13 @@ add_intrinsics :: proc()
     add_intrinsic("dfdy_fine", { &VEC2_TYPE }, { "x" }, &VEC2_TYPE, glsl_name = "dFdyFine")
     add_intrinsic("dfdy_fine", { &VEC3_TYPE }, { "x" }, &VEC3_TYPE, glsl_name = "dFdyFine")
     add_intrinsic("dfdy_fine", { &VEC4_TYPE }, { "x" }, &VEC4_TYPE, glsl_name = "dFdyFine")
+    add_intrinsic("smoothstep", { &FLOAT_TYPE, &FLOAT_TYPE, &FLOAT_TYPE }, { "edge0", "edge1", "x" }, &FLOAT_TYPE)
+    add_intrinsic("smoothstep", { &VEC2_TYPE, &VEC2_TYPE, &VEC2_TYPE }, { "edge0", "edge1", "x" }, &VEC2_TYPE)
+    add_intrinsic("smoothstep", { &VEC3_TYPE, &VEC3_TYPE, &VEC3_TYPE }, { "edge0", "edge1", "x" }, &VEC3_TYPE)
+    add_intrinsic("smoothstep", { &VEC4_TYPE, &VEC4_TYPE, &VEC4_TYPE }, { "edge0", "edge1", "x" }, &VEC4_TYPE)
+    add_intrinsic("smoothstep", { &FLOAT_TYPE, &FLOAT_TYPE, &VEC2_TYPE }, { "edge0", "edge1", "x" }, &VEC2_TYPE)
+    add_intrinsic("smoothstep", { &FLOAT_TYPE, &FLOAT_TYPE, &VEC3_TYPE }, { "edge0", "edge1", "x" }, &VEC3_TYPE)
+    add_intrinsic("smoothstep", { &FLOAT_TYPE, &FLOAT_TYPE, &VEC4_TYPE }, { "edge0", "edge1", "x" }, &VEC4_TYPE)
 
     // Matrix manipulation
     add_intrinsic("transpose", { &MAT4_TYPE }, { "m" }, &MAT4_TYPE)
