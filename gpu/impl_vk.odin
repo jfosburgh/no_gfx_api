@@ -524,6 +524,7 @@ _init :: proc(validation := true, loc := #caller_location) -> bool
                 shaderInt64 = true,
                 vertexPipelineStoresAndAtomics = true,
                 samplerAnisotropy = true,
+                shaderStorageImageMultisample = true,
             }
         }
         raytracing_features := &vk.PhysicalDeviceAccelerationStructureFeaturesKHR {
@@ -1091,6 +1092,7 @@ _swapchain_acquire_next :: proc() -> Texture
         dimensions = { ctx.swapchain.width, ctx.swapchain.height, 1 },
         format = .BGRA8_Unorm,
         mip_count = 1,
+        sample_count = 1,
         handle = ctx.swapchain.texture_handles[ctx.swapchain_image_idx],
     }
 }
@@ -1426,10 +1428,11 @@ _texture_create :: proc(desc: Texture_Desc, storage: gpuptr, queue: Queue = .Mai
 
     tex_info := Texture_Info { image, {} }
     sync.guard(&ctx.lock)
-    return {
+    return Texture {
         dimensions = desc_clean.dimensions,
         format = desc_clean.format,
         mip_count = desc_clean.mip_count,
+        sample_count = desc_clean.sample_count,
         handle = pool_add(&ctx.textures, tex_info, { name = name, created_at = loc } )
     }
 }
@@ -2623,6 +2626,17 @@ _cmd_begin_render_pass :: proc(cmd_buf: Command_Buffer, desc: Render_Pass_Desc, 
 
     scratch, _ := acquire_scratch()
 
+    // Compute sample count
+    sample_count := u32(1)
+    {
+        for attachment in desc.color_attachments {
+            sample_count = max(sample_count, attachment.texture.sample_count)
+        }
+        if desc.depth_attachment != nil {
+            sample_count = max(sample_count, desc.depth_attachment.?.texture.sample_count)
+        }
+    }
+
     vk_color_attachments := make([]vk.RenderingAttachmentInfo, len(desc.color_attachments), allocator = scratch)
     for &vk_attach, i in vk_color_attachments {
         vk_attach = to_vk_render_attachment(desc.color_attachments[i])
@@ -2683,7 +2697,7 @@ _cmd_begin_render_pass :: proc(cmd_buf: Command_Buffer, desc: Render_Pass_Desc, 
     }
 
     // Raster state
-    vk.CmdSetRasterizationSamplesEXT(vk_cmd_buf, { ._1 })
+    vk.CmdSetRasterizationSamplesEXT(vk_cmd_buf, to_vk_sample_count(sample_count))
     vk.CmdSetPrimitiveTopology(vk_cmd_buf, .TRIANGLE_LIST)
     vk.CmdSetPolygonModeEXT(vk_cmd_buf, .FILL)
     vk.CmdSetCullMode(vk_cmd_buf, { .BACK })
@@ -2718,8 +2732,8 @@ _cmd_begin_render_pass :: proc(cmd_buf: Command_Buffer, desc: Render_Pass_Desc, 
     vk.CmdSetVertexInputEXT(vk_cmd_buf, 0, nil, 0, nil)
     vk.CmdSetPrimitiveRestartEnable(vk_cmd_buf, false)
 
-    sample_mask := vk.SampleMask(1)
-    vk.CmdSetSampleMaskEXT(vk_cmd_buf, { ._1 }, &sample_mask)
+    sample_mask := vk.SampleMask(0xFF)
+    vk.CmdSetSampleMaskEXT(vk_cmd_buf, to_vk_sample_count(sample_count), &sample_mask)
     vk.CmdSetAlphaToCoverageEnableEXT(vk_cmd_buf, false)
 }
 
@@ -3377,10 +3391,13 @@ to_vk_render_attachment :: #force_inline proc(attach: Render_Attachment) -> vk.R
 {
     view_desc := attach.view
     texture := attach.texture
+    resolve_texture := attach.resolve_texture
+    resolve_view_desc := attach.resolve_view
 
-    tex_info := pool_get(&ctx.textures, texture.handle)
-
-    vk_image := tex_info.handle
+    has_output := texture != {}
+    vk_image := pool_get(&ctx.textures, texture.handle).handle if has_output else vk.Image(0)
+    has_resolve := resolve_texture != {}
+    vk_resolve_image := pool_get(&ctx.textures, resolve_texture.handle).handle if has_resolve else vk.Image(0)
 
     format := view_desc.format
     if format == .Default {
@@ -3389,26 +3406,52 @@ to_vk_render_attachment :: #force_inline proc(attach: Render_Attachment) -> vk.R
 
     plane_aspect: vk.ImageAspectFlags = { .DEPTH } if format == .D32_Float else { .COLOR }
 
-    image_view_ci := vk.ImageViewCreateInfo {
-        sType = .IMAGE_VIEW_CREATE_INFO,
-        image = vk_image,
-        viewType = to_vk_texture_view_type(view_desc.type),
-        format = to_vk_texture_format(format),
-        subresourceRange = {
-            aspectMask = plane_aspect,
-            levelCount = 1,
-            layerCount = 1,
+    view: vk.ImageView
+    if has_output
+    {
+        image_view_ci := vk.ImageViewCreateInfo {
+            sType = .IMAGE_VIEW_CREATE_INFO,
+            image = vk_image,
+            viewType = to_vk_texture_view_type(view_desc.type),
+            format = to_vk_texture_format(format),
+            subresourceRange = {
+                aspectMask = plane_aspect,
+                levelCount = 1,
+                layerCount = 1,
+            }
         }
+        view = get_or_add_image_view(texture.handle, image_view_ci)
     }
-    view := get_or_add_image_view(texture.handle, image_view_ci)
+
+    resolve_view: vk.ImageView
+    if has_resolve
+    {
+        resolve_image_view_ci := vk.ImageViewCreateInfo {
+            sType = .IMAGE_VIEW_CREATE_INFO,
+            image = vk_resolve_image,
+            viewType = to_vk_texture_view_type(resolve_view_desc.type),
+            format = to_vk_texture_format(format),
+            subresourceRange = {
+                aspectMask = plane_aspect,
+                levelCount = 1,
+                layerCount = 1,
+            }
+        }
+        resolve_view = get_or_add_image_view(resolve_texture.handle, resolve_image_view_ci)
+    }
+
+    vk_store_op, vk_resolve_mode := to_vk_store_op(attach.store_op)
 
     return {
         sType = .RENDERING_ATTACHMENT_INFO,
         imageView = view,
         imageLayout = .GENERAL,
         loadOp = to_vk_load_op(attach.load_op),
-        storeOp = to_vk_store_op(attach.store_op),
-        clearValue = { color = { float32 = attach.clear_color } }
+        storeOp = vk_store_op,
+        clearValue = { color = { float32 = attach.clear_color } },
+        resolveMode = vk_resolve_mode,
+        resolveImageView = resolve_view,
+        resolveImageLayout = .GENERAL if has_resolve else {},
     }
 }
 
