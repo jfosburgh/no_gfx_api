@@ -56,7 +56,7 @@ Usage :: enum { Sampled = 0, Storage, Transfer_Src, Color_Attachment, Depth_Sten
 Usage_Flags :: bit_set[Usage; u32]
 Shader_Type_Graphics :: enum { Vertex = 0, Fragment }
 Load_Op :: enum { Clear = 0, Load, Dont_Care }
-Store_Op :: enum { Store = 0, Dont_Care }
+Store_Op :: enum { Store = 0, Dont_Care, Resolve, Resolve_And_Store }
 Compare_Op :: enum { Never = 0, Less, Equal, Less_Equal, Greater, Not_Equal, Greater_Equal, Always }
 Blend_Op :: enum { Add, Subtract, Rev_Subtract, Min, Max }
 Blend_Factor :: enum { Zero, One, Src_Color, Dst_Color, Src_Alpha, Dst_Alpha, One_Minus_Src_Alpha, One_Minus_Src_Color, One_Minus_Dst_Alpha, One_Minus_Dst_Color }
@@ -153,6 +153,8 @@ Render_Attachment :: struct
     load_op: Load_Op,
     store_op: Store_Op,
     clear_color: [4]f32,
+    resolve_texture: Texture,
+    resolve_view: Texture_View_Desc,
 }
 
 Render_Pass_Desc :: struct
@@ -171,6 +173,7 @@ Texture :: struct #all_or_none
     dimensions: [3]u32,
     format: Texture_Format,
     mip_count: u32,
+    sample_count: u32,
     handle: Texture_Handle
 }
 

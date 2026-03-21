@@ -41,14 +41,16 @@ to_vk_load_op :: #force_inline proc(load_op: Load_Op) -> vk.AttachmentLoadOp
     return {}
 }
 
-to_vk_store_op :: #force_inline proc(store_op: Store_Op) -> vk.AttachmentStoreOp
+to_vk_store_op :: #force_inline proc(store_op: Store_Op) -> (vk.AttachmentStoreOp, vk.ResolveModeFlags)
 {
     switch store_op
     {
-        case .Store: return .STORE
-        case .Dont_Care: return .DONT_CARE
+        case .Store:             return .STORE,     {}
+        case .Dont_Care:         return .DONT_CARE, {}
+        case .Resolve:           return .DONT_CARE, { .AVERAGE }
+        case .Resolve_And_Store: return .STORE,     { .AVERAGE }
     }
-    return {}
+    return {}, {}
 }
 
 to_vk_compare_op :: #force_inline proc(compare_op: Compare_Op) -> vk.CompareOp
