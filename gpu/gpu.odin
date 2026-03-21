@@ -540,7 +540,7 @@ arena_alloc_raw :: proc(arena: ^Arena, #any_int el_size: i64, #any_int el_count:
         }
         else
         {
-            if arena.blocks[arena.block_idx].size <= bytes
+            if arena.blocks[arena.block_idx].size >= bytes
             {
                 return arena.blocks[arena.block_idx]
             }
