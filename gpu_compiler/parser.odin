@@ -118,6 +118,7 @@ Ast_Binary_Op :: enum
     Minus,
     Mul,
     Div,
+    Modulo,
 
     // Bitwise
     Bitwise_And,
@@ -1204,6 +1205,7 @@ Op_Info :: struct #all_or_none
 Op_Precedence := map[Token_Type]Op_Info {
     .Mul = { 3, .Mul, true },
     .Div = { 3, .Div, true },
+    .Modulo = { 3, .Modulo, true },
 
     .Plus  = { 4, .Add, true },
     .Minus = { 4, .Minus, true },

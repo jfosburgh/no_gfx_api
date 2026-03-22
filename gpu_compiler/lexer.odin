@@ -27,6 +27,7 @@ Token_Type :: enum
     Minus,
     Mul,
     Div,
+    Modulo,
     Greater,
     Less,
     Assign,
@@ -106,6 +107,7 @@ One_Char_Operators := map[u8]Token_Type {
     '-' = .Minus,
     '*' = .Mul,
     '/' = .Div,
+    '%' = .Modulo,
     '>' = .Greater,
     '<' = .Less,
     '=' = .Assign,
@@ -491,6 +493,7 @@ token_type_to_string :: proc(type: Token_Type) -> string
         case .Minus:        return "-"
         case .Mul:          return "*"
         case .Div:          return "/"
+        case .Modulo:       return "%"
         case .Greater:      return ">"
         case .Less:         return "<"
         case .Assign:       return "="
@@ -562,6 +565,7 @@ is_token_type_assign :: proc(type: Token_Type) -> bool
         case .Minus:        return false
         case .Mul:          return false
         case .Div:          return false
+        case .Modulo:       return false
         case .Greater:      return false
         case .Less:         return false
         case .Assign:       return true

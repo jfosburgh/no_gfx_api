@@ -845,6 +845,7 @@ binary_op_to_glsl :: proc(op: Ast_Binary_Op) -> string
         case .Minus:       return "-"
         case .Mul:         return "*"
         case .Div:         return "/"
+        case .Modulo:      return "%"
         case .Bitwise_And: return "&"
         case .Bitwise_Or:  return "|"
         case .Bitwise_Xor: return "^"
