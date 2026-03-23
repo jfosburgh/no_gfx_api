@@ -371,6 +371,8 @@ cmd_begin_render_pass: proc(cmd_buf: Command_Buffer, desc: Render_Pass_Desc, loc
 cmd_end_render_pass: proc(cmd_buf: Command_Buffer, loc := #caller_location) : _cmd_end_render_pass
 
 // Indices, vertex_data and fragment_data can be nil
+cmd_draw_instanced: proc(cmd_buf: Command_Buffer, vertex_data, fragment_data: gpuptr, index_count: u32, 
+                         instance_count: u32 = 1, loc := #caller_location) : _cmd_draw_instanced
 cmd_draw_indexed_instanced: proc(cmd_buf: Command_Buffer, vertex_data, fragment_data, indices: gpuptr,
                                  index_count: u32, instance_count: u32 = 1, loc := #caller_location) : _cmd_draw_indexed_instanced
 cmd_draw_indexed_instanced_indirect: proc(cmd_buf: Command_Buffer, vertex_data, fragment_data, indices,
